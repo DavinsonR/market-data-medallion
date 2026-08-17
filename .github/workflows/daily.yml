@@ -42,6 +42,8 @@ jobs:
         if: steps.guard.outputs.configured == 'true'
         run: uv sync --all-extras
 
+      # pipeline.flows runs the whole chain itself: ingest -> dbt build (with all
+      # data-quality tests) -> backtests -> leaderboard -> retention -> export.
       - name: Run daily pipeline flow
         if: steps.guard.outputs.configured == 'true'
         env:
@@ -56,19 +58,10 @@ jobs:
         run: |
           uv run python -c "from pipeline.config import dbt_env; [print(f'{k}={v}') for k, v in dbt_env().items()]" >> "$GITHUB_ENV"
 
-      - name: dbt build
-        if: steps.guard.outputs.configured == 'true'
-        run: uv run dbt build --profiles-dir dbt --project-dir dbt
-
+      # Freshness is a clock check, not a data check, so `dbt build` never runs it.
       - name: dbt source freshness
         if: steps.guard.outputs.configured == 'true'
         run: uv run dbt source freshness --profiles-dir dbt --project-dir dbt
-
-      - name: Export JSON for the portfolio site
-        if: steps.guard.outputs.configured == 'true'
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: uv run python -m pipeline.export
 
       - name: Commit refreshed exports
         if: steps.guard.outputs.configured == 'true'
