@@ -863,4 +863,114 @@ Es una limitación real que debe declararse. Y también una oportunidad: al tene
 
 ---
 
+---
+
+## 10. Estrategias combinadas y validación fuera de muestra (1,347 variantes)
+
+De 4 estrategias y 177 backtests pasamos a **5 estrategias y 1,347 variantes**: cada combinación AND posible ("largo solo cuando TODAS las señales seleccionadas están en verde"). Esta sección documenta el diseño y, sobre todo, **el resultado, que es el más valioso del proyecto**.
+
+### 10.1 La combinatoria y sus dos límites
+
+Con 5 estrategias hay 2⁵−1 = **31 combinaciones** por activo con volumen, y 2⁴−1 = **15** en divisas (donde `volume_breakout` no aplica): 42×31 + 3×15 = **1,347 variantes**.
+
+| Límite | Valor medido | Consecuencia de diseño |
+|---|---|---|
+| Espacio | 174 KB por backtest con curva | 1,347 curvas = 229 MB/corrida → 458 MB con retención, sobre el techo de 500 MB. **Solo las 222 individuales guardan curva**; las 1,125 combinaciones guardan solo métricas |
+| Estadística | 1,347 pruebas | Probar tanto y quedarse con lo mejor es *data dredging*. Cada variante se evalúa además en un **split 70/30** de entrenamiento y validación |
+
+La restricción de espacio está ahora en la base de datos, no solo en Python:
+```sql
+CHECK (strategy_kind = 'single' OR NOT has_curve)
+```
+
+### 10.2 La decisión de rendimiento que hace esto viable
+
+Ingenuamente, evaluar 31 combinaciones implicaría recalcular indicadores 80 veces por activo (cada componente aparece en 16 de las 31). En vez de eso, `build_all_variants` calcula las señales de cada estrategia **una sola vez** y las combinaciones son operaciones AND vectoriales sobre esas series ya calculadas:
+
+```python
+signals[cfg.name] = pd.Series(values, index=key)   # 5 cálculos, no 80
+...
+CompositeStrategy(components=combo, component_signals=tuple(signals[n] for n in combo), ...)
+```
+
+Medido sobre SPY: 5 cálculos y 0.10 s contra 80 cálculos y 0.40 s por el camino ingenuo — **3.8× más rápido, 16× menos trabajo de indicadores**. Hay un test que lo fija contando las llamadas a `generate_signals` con un espía.
+
+Detalle sutil: las señales precalculadas se indexan **por timestamp, no por posición**. Las ventanas de validación son rebanadas (`df.iloc[k:]`) con el índice reiniciado; una serie indexada por número de fila fallaría la alineación en cada ventana.
+
+### 10.3 Fibonacci como quinta estrategia
+
+```python
+swing_high = df["high"].rolling(window, min_periods=window).max()
+swing_low  = df["low"].rolling(window, min_periods=window).min()
+level = swing_high - (swing_high - swing_low) * ratio
+return (df["close"] > level).astype(int)
+```
+Largo mientras el precio se sostenga por encima del retroceso de 61.8% de su rango de las últimas 100 barras. NaN durante el calentamiento → posición 0.
+
+### 10.4 El split de validación y el bug que casi arruina la métrica principal
+
+La idea: los primeros 70% de las barras son *dentro de muestra*, el 30% restante *fuera de muestra*, y una combinación solo es creíble si gana en ambas. Cada ventana es un backtest independiente que arranca plano con el capital inicial.
+
+**El bug (encontrado por revisión adversarial, severidad alta):** los indicadores están en NaN durante su calentamiento y toda estrategia lee NaN como "plano". La ventana de entrenamiento cargaba con **todo** ese periodo muerto y la de validación con **ninguno** — las dos ventanas no eran regímenes comparables, y la de entrenamiento se veía peor solo por arrancar en frío. El revisor estimó que movía la cifra principal en un tercio.
+
+**El fix:** cada estrategia declara su propio `warmup_bars` (una combinación hereda el del componente más lento), y el split se toma sobre las barras posteriores al calentamiento:
+```python
+warmup = min(max(int(getattr(strategy, "warmup_bars", 0)), 0), n)
+split = warmup + min(max(int(round((n - warmup) * train_fraction)), 0), n - warmup)
+```
+El backtest de periodo completo sí cubre todas las barras — esa es la respuesta honesta a "¿cuánto habría rendido de punta a punta?".
+
+**Lo que las ventanas SÍ comparten, a propósito:** un único camino causal de señales, así que la ventana de validación hereda indicadores calientes y el estado latente de la estrategia (el *latch* del RSI, el estado de las EMAs del MACD). Es el caso real de despliegue: un modelo no olvida todo a medianoche de la fecha de corte. Lo que nunca hereda es capital.
+
+### 10.5 El segundo bug crítico: premiar a las que nunca operan
+
+La `exposure` (fracción de barras realmente invertido) se calculaba por ventana y **se descartaba antes de llegar a la base de datos**. Consecuencia: una combinación sobre-filtrada que nunca abre posición produce exactamente 0% de retorno, y **se anotaba como "le ganó a buy & hold" cada vez que el mercado caía** — premiando justo a las variantes menos reales.
+
+Fix en dos capas: la migración 004 añade `is_exposure`/`oos_exposure`, y el mart exige haber operado:
+```sql
+total_return > buy_hold_return and coalesce(n_trades, 0) > 0 as beat_bh_full,
+```
+
+También se corrigió el Sharpe: en una ventana larga que se movió en muy pocas barras, `mean = r/N` y `std = r/√N`, así que **r se cancela** y el Sharpe colapsa a `√(periodos/N)` sin importar el tamaño del movimiento. Ahora devuelve `None` en esas condiciones — la misma regla de "ausente es mejor que fabricado" del resto del proyecto.
+
+### 10.6 EL RESULTADO
+
+**De 349 variantes que le ganaron a comprar-y-mantener dentro de muestra, solo 40 siguieron ganando fuera de muestra.**
+
+| Señales combinadas | Variantes | Ganaron dentro | Siguieron ganando | Supervivencia |
+|---|---|---|---|---|
+| 1 (individuales) | 222 | 75 | 10 | 13.3% |
+| 2 | 438 | 139 | 14 | 10.1% |
+| 3 | 432 | 109 | 13 | 11.9% |
+| 4 | 213 | 26 | 3 | 11.5% |
+| **5 (todas)** | 42 | **0** | 0 | — |
+| **TOTAL** | **1,347** | **349** | **40** | **11.5%** |
+
+**El 88.5% de las "estrategias ganadoras" eran ilusiones del backtest.** Y la tasa de supervivencia es notablemente estable (~11.5%) sin importar cuántas señales se combinen: añadir confirmaciones **no** mejora la probabilidad de que un hallazgo sea real.
+
+### 10.7 El sobre-filtrado, medido
+
+| Señales | Tiempo en el mercado |
+|---|---|
+| 1 | 39.7% |
+| 2 | 13.7% |
+| 3 | 3.7% |
+| 4 | 0.5% |
+| **5** | **0.0%** |
+
+**Exigir que las cinco señales coincidan en verde produce cero operaciones en 45 activos y 4.5 años de historia.** Nunca coinciden.
+
+**» NEGOCIO:** estas dos tablas son la refutación empírica del instinto más común en trading técnico — "más confirmaciones = más seguridad". Cada filtro adicional no mejora la calidad de las entradas: simplemente te saca del mercado, hasta que a las cinco señales ya no hay estrategia, hay una cuenta en efectivo. Y la supervivencia plana en ~11.5% dice que la complejidad tampoco compra robustez. Cualquiera puede publicar la variante que ganó; publicar las 1,307 que no sobrevivieron, con la metodología que hace creíble la afirmación, es lo que separa un análisis de un anuncio.
+
+### 10.8 Lo que la revisión adversarial encontró
+
+16 defectos en el primer corte (3 altos, 6 medios, 7 bajos), todos corregidos. Además de los dos ya narrados:
+- **Los tests de dbt que protegen las métricas de honestidad nunca corrían sobre los datos que protegen**: se ejecutaban antes de que los backtests escribieran, y el refresco posterior usaba `dbt run` (que no corre tests). Ahora es `dbt build --select`.
+- **Los tests de Python leían `DATABASE_URL`** — que puede apuntar al warehouse gestionado — e insertaban 4,041 filas y corrían un purgado de tabla completa. Ahora leen `MDM_TEST_DATABASE_URL`: los tests tienen su propia base o ninguna.
+- `index.json` emitía las 1,347 variantes dos veces por activo (en `strategies` y en `combinations`).
+- Componentes de una combinación no canonicalizados: el mismo conjunto podía persistirse bajo dos nombres.
+- Detección de "sin volumen" que solo cubría NaN, no un tape en cero (la forma realista de una caída de proveedor).
+
+---
+
 *Documento vivo — si agregamos activos, estrategias o fuentes nuevas, esta bitácora se actualiza junto con el código que describe.*
