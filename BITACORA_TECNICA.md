@@ -753,4 +753,114 @@ jobs:
 
 ---
 
+---
+
+## 9. Expansión: de 4 a 45 activos (y los dos bugs que solo aparecen a escala)
+
+El pipeline nació con 4 activos. Al llevarlo a 45 (20 ETFs, 10 acciones US, 10 ADRs latinoamericanos, 3 divisas, 2 cripto) aparecieron problemas que con 4 activos simplemente no existían. Esta sección documenta qué cambió y por qué.
+
+### 9.1 Los límites que definieron el diseño
+
+| Límite Tiingo free (verificado en su pricing) | Consecuencia de diseño |
+|---|---|
+| **50 requests/hora** | 43 símbolos = 43 requests por corrida. Cabe, pero sin margen → hizo indispensable el circuit breaker (§9.4) |
+| 1,000/día · 500 símbolos únicos/mes · 1 GB/mes | Holgado, no restringe |
+| FX incluido, **pero sin volumen** | `Candle.volume` pasó a `float | None`; nuevo cliente separado |
+
+### 9.2 `dim_assets` — por qué un seed y no otro `CASE WHEN`
+
+Con 4 activos, `mart_data_quality` deducía la clase con `symbol LIKE '%-USD'` → cripto. Con divisas eso se rompe: `USDCOP` cumple el patrón sin ser cripto. En vez de parchar la heurística, se introdujo una **dimensión real**: `dbt/seeds/dim_assets.csv`, generado programáticamente desde `config.yaml` (no tecleado a mano — 45 filas escritas a mano son 45 oportunidades de typo).
+
+```sql
+-- Los marts ahora hacen INNER JOIN, no derivan del string:
+from {{ ref('stg_ohlcv') }} s
+inner join {{ ref('dim_assets') }} d on s.symbol = d.symbol
+```
+
+Detalle de diseño deliberado: el join es **INNER**, no LEFT. Si alguien ingiere un símbolo sin catalogarlo, esa fila desaparece de los marts en vez de aparecer con `asset_class` NULL y anualizarse silenciosamente a 252 días. Y para que esa desaparición no sea silenciosa, se agregó un **test de relación** (`relationships`): todo símbolo en `stg_ohlcv` debe existir en `dim_assets`, o `dbt build` falla en voz alta.
+
+**» NEGOCIO:** esto convierte el modelo de "4 tablas sueltas" en un modelo dimensional de verdad — hechos (`fct_ohlcv_indicators`) + dimensión (`dim_assets`). Es lo que permite la pregunta que antes no se podía hacer: *"¿el timing activo funciona distinto en Latam que en EE.UU.?"*
+
+### 9.3 `mart_strategy_leaderboard` — el mart que convierte 177 backtests en un hallazgo
+
+Con 16 backtests, un resultado es anécdota. Con 177, es estadística. Este mart agrega por `(estrategia, clase, región)` con totales generales vía `grouping sets`:
+
+```sql
+count(*) filter (where total_return > buy_hold_return) as n_beat_buy_hold,
+avg(total_return - buy_hold_return) as avg_excess_return,
+percentile_cont(0.5) within group (order by sharpe) as median_sharpe
+```
+
+Nota: se usa `grouping()` (no `coalesce`) para marcar las filas de total general, de modo que un `'ALL'` genuino nunca se confunda con un NULL de agregación.
+
+Como este mart lee `gold.backtest_runs` —que escribe Python, no dbt— se declara como **source** de dbt, y el flow lo reconstruye en un segundo paso (`dbt run --select mart_strategy_leaderboard`) *después* de correr los backtests.
+
+### 9.4 Bug encontrado a escala: reintentar un 429 empeora el 429
+
+**Síntoma:** primera corrida con 45 activos → 28 símbolos fallaron, pero `meta.ingest_runs` registró **47 fallos**. Más registros que símbolos.
+
+**Causa raíz:** ante un `HTTP 429`, `request_json` reintentaba 3 veces con backoff de segundos, y encima Prefect reintentaba el task 2 veces más → hasta **9 llamadas por símbolo fallido**. Contra una cuota *horaria*, esperar 1, 2 o 30 segundos jamás va a ayudar: el reintento no puede tener éxito, solo consume más cuota y hunde más el problema. 28 símbolos × 9 = ~250 llamadas quemadas contra un techo de 50.
+
+**Fix, en tres piezas:**
+```python
+# base.py — un 429 no es un fallo transitorio, es una respuesta con significado
+if last_status == 429:
+    raise RateLimitError(f"GET {url} refused with HTTP 429 (rate limited)")
+if last_status >= 500:            # esto SÍ es transitorio: reintentar tiene sentido
+    ...backoff exponencial...
+```
+```python
+# flows.py — circuit breaker: si la fuente ya dijo 429, no se le insiste más en esta corrida
+if source_name in limited_sources:
+    deferred.append(label); continue
+```
+Y el task de Prefect **devuelve** el resultado en vez de lanzar excepción cuando es rate limit, para que Prefect no lo reintente (Prefect reintenta ante excepciones; sin excepción, no hay reintento).
+
+**Resultado medido en la corrida siguiente:** `31 ingestions ok, 0 failed, 16 deferred (rate limit)` — cero fallos, 16 diferidos limpiamente, y los watermarks intactos para que la próxima corrida los retome sola.
+
+**» NEGOCIO:** esta es la distinción que separa un script de un pipeline: **"diferido por cuota" no es un error**, es una decisión operativa consciente. El sistema sabe que no puede avanzar ahora, lo declara, protege lo que ya tiene, y se recupera solo. Un error, en cambio, exige intervención humana. Tratar ambos igual es lo que produce alertas que nadie lee.
+
+### 9.5 Bug encontrado a escala: la columna que es toda NULL
+
+**Síntoma:** `pandera.errors.SchemaError: expected series 'volume' to have type float64, got object` — solo al procesar divisas.
+
+**Causa:** cuando una columna viene *enteramente* NULL desde Postgres (el volumen de FX, que no existe), psycopg entrega `None` en cada fila y pandas infiere dtype `object`, no `float64`. Con 4 activos nunca pasó porque todos tenían volumen.
+
+**Fix:**
+```python
+numeric = [c for c in df.columns if c not in ("symbol", "ts")]
+df[numeric] = df[numeric].astype("float64")   # None -> NaN, dtype garantizado
+```
+Y en el mismo cambio, los backtests pasaron a tolerar fallos por símbolo: un activo malformado no puede costarles el backtest a los otros 44.
+
+### 9.6 El export en dos niveles
+
+45 activos × 4 estrategias × 400 puntos de curva = ~2.4 MB en un solo archivo. Demasiado para que un sitio estático lo cargue de entrada. Ahora son dos niveles:
+
+- **`exports/index.json`** (83 KB reales): los 45 activos con sus métricas de titular, el leaderboard completo y la salud del pipeline. Sin curvas.
+- **`exports/backtests/<SÍMBOLO>.json`** (~50 KB c/u): las curvas de equity de ese símbolo, que el playground carga solo cuando el usuario lo elige.
+
+El export hace **10 queries constantes** sin importar cuántos activos haya (una sola consulta masiva de curvas con `WHERE backtest_run_id = ANY(...)` agrupada en Python), no una por símbolo.
+
+### 9.7 Los resultados — 177 backtests, un hallazgo incómodo
+
+| Estrategia | Le ganó a buy & hold | Exceso promedio | Sharpe mediano |
+|---|---|---|---|
+| rsi_reversion | 17/45 (37.8%) | **−19.6 pp** | 0.30 |
+| sma_cross | 11/45 (24.4%) | **−35.4 pp** | 0.18 |
+| macd | 6/45 (13.3%) | **−41.9 pp** | 0.11 |
+| volume_breakout | 6/42 (14.3%) | **−54.1 pp** | −0.45 |
+
+**De 177 combinaciones estrategia-activo, solo 40 (22.6%) le ganaron a comprar y no hacer nada.** Y ninguna de las cuatro estrategias tiene exceso promedio positivo. Por región: global 30.4%, EE.UU. 26.2%, Latam 16.1%, emergentes 12.5%.
+
+**» NEGOCIO:** este es el resultado más valioso del proyecto y hay que publicarlo tal cual. Con comisiones y slippage realistas, y sin mirar el futuro, el timing activo pierde de forma consistente contra la estrategia más simple que existe. Cualquiera puede mostrar la estrategia que ganó; mostrar las 137 que perdieron —con la metodología que lo hace creíble— es lo que distingue un análisis honesto de un anuncio.
+
+### 9.8 Limitación declarada: los ADRs latinoamericanos
+
+EC (Ecopetrol), CIB (Bancolombia), VALE, PBR, ITUB, ABEV, AMX, FMX, BAP y SQM cotizan en NYSE/NASDAQ **en dólares**, no en sus bolsas locales (el free tier de Tiingo no cubre BVC, B3 ni BMV). Su retorno mezcla, por tanto, el desempeño de la empresa con el movimiento de la moneda local frente al dólar.
+
+Es una limitación real que debe declararse. Y también una oportunidad: al tener USDCOP y USDBRL en el mismo warehouse, se puede descomponer cuánto del retorno en dólares de Ecopetrol fue la empresa y cuánto fue el peso — un análisis que solo se le ocurre a alguien que entiende de economía, no solo de datos.
+
+---
+
 *Documento vivo — si agregamos activos, estrategias o fuentes nuevas, esta bitácora se actualiza junto con el código que describe.*
