@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets and local environment
+.env
+
+# dbt build artifacts
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml
+
+# Logs
+logs/
+*.log
+
+# NOTE: exports/*.json is tracked on purpose — the portfolio site reads it straight from the repo.

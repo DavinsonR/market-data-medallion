@@ -1,0 +1,23 @@
+# medallion — dbt project transforming bronze raw candles into silver/gold relations.
+name: medallion
+version: "0.1.0"
+require-dbt-version: ">=1.8.0"
+
+profile: medallion
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+target-path: target
+clean-targets:
+  - target
+  - dbt_packages
+
+models:
+  medallion:
+    +materialized: table
+    staging:
+      +schema: silver
+    marts:
+      +schema: gold

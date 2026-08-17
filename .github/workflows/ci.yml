@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    name: Lint and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: Pytest
+        run: uv run pytest
+
+  integration:
+    name: Postgres + dbt integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: mdm
+          POSTGRES_DB: mdm
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mdm -d mdm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MDM_PG_HOST: localhost
+      MDM_PG_PORT: "5432"
+      MDM_PG_USER: mdm
+      MDM_PG_DB: mdm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Apply migrations
+        run: |
+          for f in db/migrations/*.sql; do
+            echo "applying $f"
+            psql "postgresql://mdm@localhost:5432/mdm" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Seed deterministic bronze fixtures
+        run: psql "postgresql://mdm@localhost:5432/mdm" -v ON_ERROR_STOP=1 -f tests/fixtures/seed_bronze.sql
+
+      - name: dbt build
+        run: uv run dbt build --profiles-dir dbt --project-dir dbt

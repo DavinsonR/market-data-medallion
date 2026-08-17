@@ -1,0 +1,15 @@
+# Connection profile — every value is overridable via MDM_PG_* environment variables,
+# defaulting to the local development Postgres (port 5433, user mdm, no password).
+medallion:
+  target: local
+  outputs:
+    local:
+      type: postgres
+      host: "{{ env_var('MDM_PG_HOST', 'localhost') }}"
+      port: "{{ env_var('MDM_PG_PORT', '5433') | as_number }}"
+      user: "{{ env_var('MDM_PG_USER', 'mdm') }}"
+      password: "{{ env_var('MDM_PG_PASSWORD', '') }}"
+      dbname: "{{ env_var('MDM_PG_DB', 'mdm') }}"
+      schema: silver
+      threads: 4
+      connect_timeout: 10

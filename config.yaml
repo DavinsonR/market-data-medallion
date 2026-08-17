@@ -1,0 +1,44 @@
+# Declarative pipeline configuration — the single place to add assets or strategies.
+granularity: "1d"
+
+assets:
+  - symbol: BTC-USD
+    asset_class: crypto            # crypto -> 365 trading days/year for annualization
+    sources:
+      primary: coinbase
+      reconcile: kraken            # cross-exchange reconciliation in gold
+    backfill_start: "2022-01-01"
+  - symbol: ETH-USD
+    asset_class: crypto
+    sources:
+      primary: coinbase
+      reconcile: kraken
+    backfill_start: "2022-01-01"
+  - symbol: SPY
+    asset_class: equity            # equity -> 252 trading days/year
+    sources:
+      primary: tiingo              # requires TIINGO_API_KEY; skipped with a warning if unset
+    backfill_start: "2022-01-01"
+  - symbol: QQQ
+    asset_class: equity
+    sources:
+      primary: tiingo
+    backfill_start: "2022-01-01"
+
+backtest:
+  initial_cash: 10000
+  fee_bps: 10                      # per side, taker-fee ballpark
+  slippage_bps: 5                  # applied adversely on every fill
+  strategies:
+    - name: sma_cross
+      params: { fast: 20, slow: 50 }
+    - name: macd
+      params: { fast: 12, slow: 26, signal: 9 }
+    - name: rsi_reversion
+      params: { period: 14, entry_below: 30, exit_above: 50 }
+    - name: volume_breakout
+      params: { price_window: 20, volume_window: 20, volume_mult: 1.5 }
+
+export:
+  path: exports/trading_sim.json
+  equity_curve_max_points: 400

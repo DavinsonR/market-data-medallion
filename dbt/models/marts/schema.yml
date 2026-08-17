@@ -1,0 +1,60 @@
+version: 2
+
+models:
+  - name: fct_ohlcv_indicators
+    description: >
+      Canonical daily candles enriched with technical indicators (SMAs, Cutler's RSI,
+      Bollinger bands, daily returns). Rolling metrics are NULL until their window is
+      completely full.
+    data_tests:
+      - unique_combination:
+          arguments:
+            combination: [symbol, ts]
+    columns:
+      - name: symbol
+        data_tests:
+          - not_null
+      - name: ts
+        data_tests:
+          - not_null
+
+  - name: mart_source_reconciliation
+    description: >
+      Coinbase vs Kraken close comparison per (symbol, ts); is_discrepant flags bars
+      whose closes differ by more than 0.5%.
+    data_tests:
+      - unique_combination:
+          arguments:
+            combination: [symbol, ts]
+    columns:
+      - name: symbol
+        data_tests:
+          - not_null
+      - name: ts
+        data_tests:
+          - not_null
+
+  - name: mart_data_quality
+    description: >
+      Per-symbol completeness report: expected vs actual days, gaps, and counts of
+      null-price / zero-volume bars.
+    columns:
+      - name: symbol
+        data_tests:
+          - not_null
+          - unique
+      - name: asset_class
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["crypto", "equity"]
+
+  - name: mart_asset_summary
+    description: >
+      One row per symbol: latest close, 30-day return, annualized 30-day volatility,
+      last candle timestamp and staleness flag.
+    columns:
+      - name: symbol
+        data_tests:
+          - not_null
+          - unique

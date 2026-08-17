@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: stg_ohlcv_all_sources
+    description: >
+      Typed OHLCV rows parsed from bronze payloads, one row per (source, symbol, ts),
+      with row-level quality flags (is_zero_volume, has_null_price, high_lt_low).
+    columns:
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["coinbase", "kraken", "tiingo"]
+      - name: symbol
+        data_tests:
+          - not_null
+      - name: ts
+        description: "Bar OPEN time, timezone-aware UTC."
+        data_tests:
+          - not_null
+      # A payload-shape regression in any source must fail loudly here,
+      # before NULLs launder into silent zeros downstream.
+      - name: open
+        data_tests: [not_null]
+      - name: high
+        data_tests: [not_null]
+      - name: low
+        data_tests: [not_null]
+      - name: close
+        data_tests: [not_null]
+      - name: volume
+        data_tests: [not_null]
+
+  - name: stg_ohlcv
+    description: >
+      Canonical candle series deduplicated to one row per (symbol, ts) with source
+      priority coinbase > kraken > tiingo.
+    data_tests:
+      - unique_combination:
+          arguments:
+            combination: [symbol, granularity, ts]
+      - ohlc_consistency:
+          config:
+            severity: error
+    columns:
+      - name: symbol
+        data_tests:
+          - not_null
+      - name: ts
+        data_tests:
+          - not_null
+      - name: source
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["coinbase", "kraken", "tiingo"]

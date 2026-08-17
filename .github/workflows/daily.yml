@@ -1,0 +1,99 @@
+name: Daily data refresh
+
+on:
+  schedule:
+    - cron: "47 10 * * *" # off the hour on purpose: GitHub delays on-the-hour schedules
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit refreshed exports/*.json
+  actions: write # keepalive-workflow re-enables the schedule via the API
+
+concurrency:
+  group: daily-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check required secrets
+        id: guard
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "secrets not configured, skipping"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up uv
+        if: steps.guard.outputs.configured == 'true'
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        if: steps.guard.outputs.configured == 'true'
+        run: uv sync --all-extras
+
+      - name: Run daily pipeline flow
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TIINGO_API_KEY: ${{ secrets.TIINGO_API_KEY }}
+        run: uv run python -m pipeline.flows
+
+      - name: Derive dbt connection settings
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          uv run python -c "from pipeline.config import dbt_env; [print(f'{k}={v}') for k, v in dbt_env().items()]" >> "$GITHUB_ENV"
+
+      - name: dbt build
+        if: steps.guard.outputs.configured == 'true'
+        run: uv run dbt build --profiles-dir dbt --project-dir dbt
+
+      - name: dbt source freshness
+        if: steps.guard.outputs.configured == 'true'
+        run: uv run dbt source freshness --profiles-dir dbt --project-dir dbt
+
+      - name: Export JSON for the portfolio site
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: uv run python -m pipeline.export
+
+      - name: Commit refreshed exports
+        if: steps.guard.outputs.configured == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add exports/*.json
+          if git diff --cached --quiet; then
+            echo "exports unchanged, nothing to commit"
+          else
+            git commit -m "data: daily refresh [skip ci]"
+            git push
+          fi
+
+      - name: Supabase keep-alive ping
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -n "$SUPABASE_URL" ]; then
+            curl -fsS -H "apikey: $SUPABASE_ANON_KEY" "$SUPABASE_URL/rest/v1/" -o /dev/null
+            echo "Supabase project pinged"
+          else
+            echo "SUPABASE_URL not set, skipping ping"
+          fi
+
+      - name: Keep scheduled workflow alive
+        uses: gautamkrishnar/keepalive-workflow@v2

@@ -1,0 +1,22 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: "Append-only raw layer: candles exactly as each source API returned them."
+    schema: bronze
+    loaded_at_field: ingested_at
+    freshness:
+      warn_after: { count: 36, period: hour }
+      error_after: { count: 72, period: hour }
+    tables:
+      - name: raw_candles
+        description: >
+          One row per (source, symbol, granularity, candle_ts). The payload JSONB is the
+          untouched API record; candle_ts is the bar OPEN time in UTC.
+
+  - name: meta
+    description: "Operational audit tables written by the ingestion layer."
+    schema: meta
+    tables:
+      - name: ingest_runs
+        description: "One row per ingestion attempt, success or failure."
