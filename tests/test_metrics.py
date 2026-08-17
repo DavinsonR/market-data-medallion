@@ -9,7 +9,15 @@ import pandas as pd
 import pytest
 
 from pipeline.backtest.engine import Trade
-from pipeline.backtest.metrics import cagr, max_drawdown, n_trades, sharpe, total_return, win_rate
+from pipeline.backtest.metrics import (
+    cagr,
+    exposure,
+    max_drawdown,
+    n_trades,
+    sharpe,
+    total_return,
+    win_rate,
+)
 
 
 def _trade(return_pct: float) -> Trade:
@@ -69,6 +77,46 @@ def test_sharpe_none_when_flat():
 def test_sharpe_none_with_fewer_than_two_returns():
     assert sharpe(pd.Series([100.0, 110.0]), 252) is None
     assert sharpe(pd.Series([100.0]), 252) is None
+
+
+def test_exposure_fully_invested_is_one():
+    assert exposure([1, 1, 1, 1]) == 1.0
+
+
+def test_exposure_never_invested_is_zero():
+    assert exposure([0] * 250) == 0.0
+
+
+def test_exposure_counts_bars_not_trades():
+    # Ten bars, three of them held — in two separate spells, which must not matter.
+    assert exposure([0, 1, 1, 0, 0, 0, 1, 0, 0, 0]) == 0.3
+
+
+def test_exposure_matches_an_over_filtered_combination():
+    # The case the metric exists for: 2 invested bars out of 500.
+    positions = [0] * 500
+    positions[100] = positions[101] = 1
+    assert exposure(positions) == pytest.approx(0.004, rel=1e-15)
+
+
+def test_exposure_accepts_a_series_and_an_array():
+    assert exposure(pd.Series([0, 1, 1, 1])) == 0.75
+    assert exposure(np.array([0, 0, 1, 1], dtype=np.int8)) == 0.5
+
+
+def test_exposure_counts_any_non_zero_position():
+    # Fractional sizing is not used today, but a half position is still exposure.
+    assert exposure([0.0, 0.5, 1.0, 0.0]) == 0.5
+
+
+def test_exposure_treats_nan_as_flat():
+    # A NaN is "no position recorded", not "invested"; np.count_nonzero would disagree.
+    assert exposure([float("nan"), 1.0, 0.0, 1.0]) == 0.5
+
+
+def test_exposure_empty_raises():
+    with pytest.raises(ValueError, match="empty"):
+        exposure([])
 
 
 def test_win_rate_and_n_trades():

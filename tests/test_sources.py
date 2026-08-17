@@ -22,7 +22,9 @@ from pipeline.sources.tiingo import TiingoClient
 from pipeline.sources.tiingo_fx import TiingoFxClient
 
 FIXTURES = Path(__file__).parent / "fixtures"
-PG_URL = os.environ.get("DATABASE_URL", "postgresql://mdm@localhost:5433/mdm")
+# Never DATABASE_URL: that may point at the managed warehouse, and these tests
+# write rows and run a table-wide prune. Tests get their own database or none.
+PG_URL = os.environ.get("MDM_TEST_DATABASE_URL", "postgresql://mdm@localhost:5433/mdm")
 
 SEED_RUN_IDS = (
     "11111111-1111-4111-8111-111111111111",  # coinbase BTC-USD

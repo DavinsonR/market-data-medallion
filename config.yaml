@@ -89,6 +89,21 @@ backtest:
     - name: volume_breakout
       params: { price_window: 20, volume_window: 20, volume_mult: 1.5 }
       requires_volume: true        # skipped for FX, which has no volume
+    - name: fibonacci
+      params: { window: 100, ratio: 0.618 }
+
+  # Every non-empty AND-combination of the strategies above is also evaluated
+  # ("long only while every selected signal is green"): 31 variants per asset
+  # with volume, 15 for FX. Only single strategies keep an equity curve — storing
+  # 1,347 curves per run would not fit the database's free tier.
+  combinations:
+    enabled: true
+    store_curves: false
+
+  # Guard against data dredging: with ~1,347 variants, some look brilliant by
+  # chance alone. Each variant is therefore also scored on a held-out window it
+  # never influenced.
+  train_fraction: 0.7
 
 export:
   dir: exports

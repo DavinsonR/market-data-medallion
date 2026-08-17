@@ -64,11 +64,27 @@ class StrategyConfig:
 
 
 @dataclass(frozen=True)
+class CombinationsConfig:
+    """AND-combinations of the configured strategies.
+
+    Storing an equity curve for every combination would not fit the database's
+    free tier, so combinations keep metrics only unless explicitly enabled.
+    """
+
+    enabled: bool = True
+    store_curves: bool = False
+
+
+@dataclass(frozen=True)
 class BacktestConfig:
     initial_cash: float
     fee_bps: float
     slippage_bps: float
     strategies: list[StrategyConfig]
+    combinations: CombinationsConfig = field(default_factory=CombinationsConfig)
+    # Share of the series used in-sample; the remainder is never used to select
+    # anything, which is what makes the out-of-sample numbers meaningful.
+    train_fraction: float = 0.7
 
 
 @dataclass(frozen=True)
@@ -131,6 +147,8 @@ def load_config(path: Path | None = None) -> AppConfig:
                 )
                 for s in bt["strategies"]
             ],
+            combinations=CombinationsConfig(**(bt.get("combinations") or {})),
+            train_fraction=bt.get("train_fraction", 0.7),
         ),
         export=ExportConfig(**raw["export"]),
         _by_symbol={a.symbol: a for a in assets},

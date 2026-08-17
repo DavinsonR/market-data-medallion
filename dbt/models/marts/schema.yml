@@ -76,11 +76,12 @@ models:
 
   - name: mart_strategy_leaderboard
     description: >
-      Strategy-vs-buy-and-hold scoreboard built from the latest backtest run per
-      (symbol, strategy). Two grouping levels share the relation: detail rows at the
-      (strategy, asset_class, region) grain (is_grand_total = false) and one per-strategy
-      total across all classes and regions (is_grand_total = true, asset_class = 'ALL',
-      region = 'ALL'). Empty until the backtest engine has written to gold.backtest_runs.
+      Strategy-vs-buy-and-hold scoreboard built from mart_combination_analysis (the latest
+      backtest run per (symbol, strategy), singles and AND-combinations alike). Two grouping
+      levels share the relation: detail rows at the (strategy, asset_class, region) grain
+      (is_grand_total = false) and one per-strategy total across all classes and regions
+      (is_grand_total = true, asset_class = 'ALL', region = 'ALL'). Empty until the backtest
+      engine has written to gold.backtest_runs.
     data_tests:
       - unique_combination:
           arguments:
@@ -89,6 +90,46 @@ models:
       - name: strategy
         data_tests:
           - not_null
+      - name: strategy_kind
+        description: >
+          'single' for one of the five base strategies, 'combo' for an AND-combination.
+          Functionally determined by the strategy name, so it does not change the grain.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["single", "combo"]
+      - name: n_components
+        description: "Number of ANDed component strategies, 1..5."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: n_beat_is
+        description: "Variants that beat buy and hold in the in-sample window."
+        data_tests:
+          - not_null
+      - name: n_beat_is_scored_oos
+        description: >
+          Of the in-sample winners, how many were actually scored out of sample — the
+          denominator of oos_survival_rate. An unscored window is missing evidence, not a
+          death.
+        data_tests:
+          - not_null
+      - name: n_beat_is_and_oos
+        description: >
+          Of those, how many also beat it out of sample. Never larger than
+          n_beat_is_scored_oos — enforced by tests/assert_survival_rate_range.sql.
+        data_tests:
+          - not_null
+      - name: oos_survival_rate
+        description: >
+          n_beat_is_and_oos / n_beat_is_scored_oos: the share of in-sample winners that kept
+          winning on the held-out window. NULL (not zero) when no in-sample winner was scored
+          out of sample, and NULL for every row until the engine writes the windowed metrics.
+          Range-checked in tests/assert_survival_rate_range.sql.
       - name: asset_class
         description: "Catalog asset class, or 'ALL' on the per-strategy total row."
         data_tests:
@@ -116,3 +157,114 @@ models:
           tests/assert_leaderboard_beat_rate_range.sql.
         data_tests:
           - not_null
+
+  - name: mart_combination_analysis
+    description: >
+      One row per (symbol, strategy) for the latest backtest of each variant — the five
+      single strategies and every non-empty AND-combination of them — joined to dim_assets
+      and carrying the full-period, in-sample and out-of-sample metrics side by side. The
+      per-asset heatmap reads this mart, and mart_strategy_leaderboard and
+      mart_overfitting_summary aggregate it, so all three share one population.
+
+      The is_*/oos_* columns and their derived booleans are NULL when the engine did not
+      evaluate that window (fewer than ~30 bars, or a run predating migration 003): a
+      missing measurement must not read as a loss.
+    data_tests:
+      - unique_combination:
+          arguments:
+            combination: [symbol, strategy]
+    columns:
+      - name: symbol
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_assets')
+                field: symbol
+      - name: strategy
+        description: "Single strategy name, or its sorted components joined by '+'."
+        data_tests:
+          - not_null
+      - name: strategy_kind
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["single", "combo"]
+      - name: n_components
+        description: >
+          Length of the components array, 1..5. Consistency with strategy and strategy_kind
+          is enforced by tests/assert_combination_naming_convention.sql.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: components
+        description: "The ANDed component strategies, alphabetically sorted (TEXT[])."
+        data_tests:
+          - not_null
+      - name: exposure
+        description: >
+          Fraction of bars holding a non-zero position; near-zero exposure is how an
+          over-filtered combination reveals itself. Range-checked in
+          tests/assert_exposure_range.sql. NULL on runs written before migration 003.
+      - name: has_curve
+        description: >
+          True only for single strategies: storing an equity curve for all ~1,347 variants
+          would not fit the database's free tier.
+        data_tests:
+          - not_null
+      - name: asset_class
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["crypto", "equity", "fx"]
+      - name: region
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["us", "latam", "emerging", "global"]
+
+  - name: mart_overfitting_summary
+    description: >
+      The project's headline honesty metric, aggregated by combination size: how many
+      variants beat buy and hold in sample, how many kept beating it on the held-out
+      window, and how much of the in-sample edge decayed. Grain is one row per
+      n_components (is_grand_total = false) plus one pooled row (is_grand_total = true,
+      n_components NULL).
+
+      The in/out-of-sample shares divide by the number of variants whose window was
+      actually evaluated (n_evaluated_is / n_evaluated_oos / n_evaluated_both), not by
+      n_variants, so an unscored window is missing evidence rather than a silent loss.
+    data_tests:
+      - unique_combination:
+          arguments:
+            combination: [is_grand_total, n_components]
+    columns:
+      - name: is_grand_total
+        description: "True on the single pooled row; false on the per-size rows."
+        data_tests:
+          - not_null
+      - name: n_components
+        description: "Combination size 1..5, or NULL on the pooled row."
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: n_variants
+        data_tests:
+          - not_null
+      - name: oos_survival_rate
+        description: >
+          n_beat_is_and_oos / n_beat_is_scored_oos. The number the README leads with. NULL,
+          not zero, when no in-sample winner was scored out of sample. Range-checked in
+          tests/assert_survival_rate_range.sql.
+      - name: avg_oos_excess_drop
+        description: >
+          Mean of (in-sample excess return - out-of-sample excess return) over the variants
+          scored on both windows. Positive means the edge decayed once the data was new.

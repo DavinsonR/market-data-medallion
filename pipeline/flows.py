@@ -21,8 +21,8 @@ import psycopg
 from prefect import flow, get_run_logger, task
 
 from pipeline import bronze, export
-from pipeline.backtest.engine import run_backtest
-from pipeline.backtest.strategies import build_strategy
+from pipeline.backtest.engine import run_backtest_windows
+from pipeline.backtest.strategies import Strategy, build_all_variants
 from pipeline.config import (
     REPO_ROOT,
     AppConfig,
@@ -39,6 +39,15 @@ from pipeline.sources import MissingApiKeyError
 
 # Sources that need TIINGO_API_KEY; skipped with a warning when it is absent.
 TIINGO_SOURCES = frozenset({"tiingo", "tiingo_fx"})
+
+# dbt models fed by gold.backtest_runs, rebuilt once the backtests have written it.
+# Selecting them by name keeps the refresh cheap; a model that does not exist yet only
+# costs a dbt warning, because this step is explicitly non-critical.
+BACKTEST_MARTS = (
+    "mart_strategy_leaderboard",
+    "mart_combination_analysis",
+    "mart_overfitting_summary",
+)
 
 INDICATORS_QUERY = """
 SELECT symbol, ts,
@@ -103,13 +112,55 @@ def run_dbt() -> None:
 
 
 @task
-def refresh_leaderboard() -> None:
-    """Rebuild the strategy leaderboard after backtests have written gold.backtest_runs."""
-    _run_dbt(["run", "--select", "mart_strategy_leaderboard"], required=False)
+def refresh_leaderboard() -> bool:
+    """Rebuild and re-test the backtest-fed marts after the backtests wrote their runs.
+
+    ``build`` rather than ``run``: these marts carry the out-of-sample honesty
+    metrics, and their tests are the only thing standing between a arithmetic
+    slip and a published number. Running them before the backtests wrote — which
+    is when the main ``dbt build`` happens — would test yesterday's data.
+    """
+    return _run_dbt(["build", "--select", *BACKTEST_MARTS], required=False)
+
+
+def _excess_return(metrics: dict[str, float | int | None] | None) -> float | None:
+    """Strategy return minus buy & hold, or None when the window produced no metrics."""
+    if not metrics:
+        return None
+    total, buy_hold = metrics.get("total_return"), metrics.get("buy_hold_return")
+    if total is None or buy_hold is None:
+        return None
+    return float(total) - float(buy_hold)
+
+
+def _best(
+    current: tuple[float, str] | None, excess: float | None, name: str
+) -> tuple[float, str] | None:
+    """Keep the better of ``current`` and ``(excess, name)``; a None excess never wins."""
+    if excess is None:
+        return current
+    return (excess, name) if current is None or excess > current[0] else current
+
+
+def _fmt_best(best: tuple[float, str] | None) -> str:
+    return "n/a" if best is None else f"{100 * best[0]:+.2f}% ({best[1]})"
+
+
+def _variant_shape(strategy: Strategy) -> tuple[str, list[str]]:
+    """``(strategy_kind, components)`` for one variant, per the v3 naming convention."""
+    components = [str(c) for c in getattr(strategy, "components", ())] or [strategy.name]
+    return ("single" if len(components) == 1 else "combo"), components
 
 
 @task
 def backtest_symbol(asset: AssetConfig, cfg: AppConfig) -> int:
+    """Backtest every strategy variant for one asset and persist the runs.
+
+    ``build_all_variants`` computes each strategy's signals once and hands back the
+    31 (15 for FX) AND-combinations built from them, and every variant is scored on
+    the full period plus the train/validation split. Only single strategies keep an
+    equity curve — the storage arithmetic is in ``export.write_backtest_result``.
+    """
     logger = _logger()
     with psycopg.connect(database_url()) as conn:
         df = pd.read_sql_query(INDICATORS_QUERY, conn, params={"symbol": asset.symbol})
@@ -125,36 +176,59 @@ def backtest_symbol(asset: AssetConfig, cfg: AppConfig) -> int:
     validate_ohlcv(df, require_volume=asset.has_volume)
 
     bt = cfg.backtest
-    n = 0
+    # Two independent filters land on the same answer for FX: config drops
+    # volume_breakout for asset classes without a tape, and build_all_variants drops
+    # it again for any frame whose volume column is entirely NULL.
+    variants = build_all_variants(df, cfg.strategies_for(asset))
+    if not bt.combinations.enabled:
+        variants = [v for v in variants if _variant_shape(v)[0] == "single"]
+
+    n = n_combos = 0
+    best_full: tuple[float, str] | None = None
+    best_oos: tuple[float, str] | None = None
     with psycopg.connect(database_url()) as conn:
-        for strat_cfg in cfg.strategies_for(asset):
-            strategy = build_strategy(strat_cfg)
-            result = run_backtest(
+        for strategy in variants:
+            kind, components = _variant_shape(strategy)
+            windowed = run_backtest_windows(
                 df,
                 strategy,
                 initial_cash=bt.initial_cash,
                 fee_bps=bt.fee_bps,
                 slippage_bps=bt.slippage_bps,
                 periods_per_year=asset.periods_per_year,
+                train_fraction=bt.train_fraction,
             )
             export.write_backtest_result(
                 conn,
                 symbol=asset.symbol,
-                strategy=strat_cfg.name,
-                params=strat_cfg.params,
+                strategy=strategy.name,
+                params=strategy.params,
                 fee_bps=bt.fee_bps,
                 slippage_bps=bt.slippage_bps,
-                result=result,
-            )
-            logger.info(
-                "%s / %s: return=%.2f%% (buy&hold %.2f%%), trades=%s",
-                asset.symbol,
-                strat_cfg.name,
-                100 * result.metrics["total_return"],
-                100 * result.metrics["buy_hold_return"],
-                result.metrics["n_trades"],
+                result=windowed.full,
+                strategy_kind=kind,
+                components=components,
+                n_components=len(components),
+                has_curve=kind == "single" or bt.combinations.store_curves,
+                exposure=windowed.metrics.get("exposure"),
+                is_metrics=windowed.is_metrics,
+                oos_metrics=windowed.oos_metrics,
+                split_ts=windowed.split_ts,
             )
             n += 1
+            n_combos += 1 if kind == "combo" else 0
+            best_full = _best(best_full, _excess_return(windowed.metrics), strategy.name)
+            best_oos = _best(best_oos, _excess_return(windowed.oos_metrics), strategy.name)
+
+    # One line per symbol, not per variant: 1,347 log lines would bury the run.
+    logger.info(
+        "%s: %d variants (%d combinations) | best excess %s | best out-of-sample excess %s",
+        asset.symbol,
+        n,
+        n_combos,
+        _fmt_best(best_full),
+        _fmt_best(best_oos),
+    )
     return n
 
 
