@@ -1,0 +1,46 @@
+symbol,asset_class,region,name,has_volume
+BTC-USD,crypto,global,Bitcoin,true
+ETH-USD,crypto,global,Ethereum,true
+SPY,equity,us,SPDR S&P 500 ETF,true
+QQQ,equity,us,Invesco QQQ (Nasdaq 100),true
+DIA,equity,us,SPDR Dow Jones Industrial Average ETF,true
+IWM,equity,us,iShares Russell 2000 ETF,true
+VTI,equity,us,Vanguard Total Stock Market ETF,true
+EFA,equity,global,iShares MSCI EAFE ETF,true
+EEM,equity,emerging,iShares MSCI Emerging Markets ETF,true
+VWO,equity,emerging,Vanguard Emerging Markets ETF,true
+ILF,equity,latam,iShares Latin America 40 ETF,true
+EWZ,equity,latam,iShares MSCI Brazil ETF,true
+EWW,equity,latam,iShares MSCI Mexico ETF,true
+ECH,equity,latam,iShares MSCI Chile ETF,true
+XLE,equity,us,Energy Select Sector SPDR,true
+XLF,equity,us,Financial Select Sector SPDR,true
+XLK,equity,us,Technology Select Sector SPDR,true
+XLV,equity,us,Health Care Select Sector SPDR,true
+TLT,equity,us,iShares 20+ Year Treasury Bond ETF,true
+HYG,equity,us,iShares iBoxx High Yield Corporate Bond ETF,true
+GLD,equity,global,SPDR Gold Shares,true
+SLV,equity,global,iShares Silver Trust,true
+USDCOP,fx,latam,US Dollar / Colombian Peso,false
+USDBRL,fx,latam,US Dollar / Brazilian Real,false
+EURUSD,fx,global,Euro / US Dollar,false
+AAPL,equity,us,Apple Inc,true
+MSFT,equity,us,Microsoft Corp,true
+NVDA,equity,us,NVIDIA Corp,true
+AMZN,equity,us,Amazon.com Inc,true
+GOOGL,equity,us,Alphabet Inc,true
+META,equity,us,Meta Platforms Inc,true
+JPM,equity,us,JPMorgan Chase & Co,true
+XOM,equity,us,Exxon Mobil Corp,true
+JNJ,equity,us,Johnson & Johnson,true
+WMT,equity,us,Walmart Inc,true
+EC,equity,latam,Ecopetrol SA (Colombia),true
+CIB,equity,latam,Bancolombia SA (Colombia),true
+VALE,equity,latam,Vale SA (Brazil),true
+PBR,equity,latam,Petrobras (Brazil),true
+ITUB,equity,latam,Itau Unibanco (Brazil),true
+ABEV,equity,latam,Ambev SA (Brazil),true
+AMX,equity,latam,America Movil (Mexico),true
+FMX,equity,latam,Fomento Economico Mexicano (Mexico),true
+BAP,equity,latam,Credicorp Ltd (Peru),true
+SQM,equity,latam,Sociedad Quimica y Minera (Chile),true

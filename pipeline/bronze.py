@@ -12,7 +12,7 @@ from psycopg.types.json import Jsonb
 
 from pipeline.config import AssetConfig, database_url, load_config
 from pipeline.models import Candle, IngestResult
-from pipeline.sources import MissingApiKeyError, get_client
+from pipeline.sources import MissingApiKeyError, RateLimitError, get_client
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ def ingest(conn: Any, source_name: str, asset: AssetConfig, granularity: str) ->
     candles: list[Candle] = []
     error: str | None = None
     status = "success"
+    rate_limited = False
     try:
         watermark = _watermark(conn, source_name, asset.symbol, granularity)
         window_start = (
@@ -65,6 +66,11 @@ def ingest(conn: Any, source_name: str, asset: AssetConfig, granularity: str) ->
         window_end = _last_closed_day(started_at)
         if window_start <= window_end:
             candles = client.fetch_candles(asset.symbol, window_start, window_end)
+    except RateLimitError as exc:
+        status = "failed"
+        rate_limited = True
+        error = f"{type(exc).__name__}: {exc}"
+        logger.warning("Rate limited on %s/%s", source_name, asset.symbol)
     except Exception as exc:
         status = "failed"
         error = f"{type(exc).__name__}: {exc}"
@@ -105,6 +111,7 @@ def ingest(conn: Any, source_name: str, asset: AssetConfig, granularity: str) ->
         rows_inserted=rows_inserted,
         status=status,
         error=error,
+        rate_limited=rate_limited,
     )
 
 

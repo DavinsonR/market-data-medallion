@@ -15,10 +15,11 @@ import pytest
 from pipeline import bronze
 from pipeline.config import AssetConfig, SourcesConfig
 from pipeline.models import Candle
-from pipeline.sources import MissingApiKeyError, SourceError, get_client
+from pipeline.sources import MissingApiKeyError, RateLimitError, SourceError, get_client
 from pipeline.sources.coinbase import CoinbaseClient
 from pipeline.sources.kraken import KrakenClient
 from pipeline.sources.tiingo import TiingoClient
+from pipeline.sources.tiingo_fx import TiingoFxClient
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PG_URL = os.environ.get("DATABASE_URL", "postgresql://mdm@localhost:5433/mdm")
@@ -120,16 +121,29 @@ def test_coinbase_paginates_windows_over_300_candles() -> None:
     assert [c.ts for c in candles] == [start, start + timedelta(days=300)]
 
 
-def test_coinbase_retries_on_429_and_5xx(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_retries_on_5xx_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pipeline.sources.base.BACKOFF_SECONDS", 0.0)
     session = FakeSession(
-        [FakeResponse(429), FakeResponse(500), FakeResponse(200, payload=[])]
+        [FakeResponse(500), FakeResponse(502), FakeResponse(200, payload=[])]
     )
     client = CoinbaseClient(session=session)  # type: ignore[arg-type]
     start = datetime(2026, 8, 1, tzinfo=UTC)
 
     assert client.fetch_candles("BTC-USD", start, start) == []
     assert len(session.calls) == 3
+
+
+def test_429_fails_fast_without_retrying(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Free-tier quotas are hourly: retrying a 429 in-run cannot succeed, it only
+    burns more quota. One call, one RateLimitError."""
+    monkeypatch.setattr("pipeline.sources.base.BACKOFF_SECONDS", 0.0)
+    session = FakeSession([FakeResponse(429), FakeResponse(200, payload=[])])
+    client = CoinbaseClient(session=session)  # type: ignore[arg-type]
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+
+    with pytest.raises(RateLimitError, match="429"):
+        client.fetch_candles("BTC-USD", start, start)
+    assert len(session.calls) == 1, "a rate-limited call must not be retried"
 
 
 def test_coinbase_raises_after_retries_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -236,6 +250,54 @@ def test_tiingo_parses_recorded_shape() -> None:
     assert call["params"]["endDate"] == "2026-08-14"
 
 
+# --- Tiingo FX -------------------------------------------------------------------
+
+
+def test_tiingo_fx_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TIINGO_API_KEY", raising=False)
+    with pytest.raises(MissingApiKeyError, match="TIINGO_API_KEY"):
+        TiingoFxClient(session=FakeSession([FakeResponse(payload=[])]))  # type: ignore[arg-type]
+    with pytest.raises(MissingApiKeyError):
+        get_client("tiingo_fx")
+
+
+def test_tiingo_fx_parses_recorded_shape_with_null_volume() -> None:
+    payload = load_fixture("tiingo_fx_prices.json")
+    session = FakeSession([FakeResponse(payload=payload)])
+    client = TiingoFxClient(session=session, api_key="test-token")  # type: ignore[arg-type]
+
+    candles = client.fetch_candles(
+        "USDCOP", datetime(2026, 8, 1, tzinfo=UTC), datetime(2026, 8, 10, tzinfo=UTC)
+    )
+
+    assert candles, "fixture should yield candles inside the window"
+    first = candles[0]
+    row = payload[0]
+    assert (first.open, first.high, first.low, first.close) == (
+        row["open"], row["high"], row["low"], row["close"],
+    )
+    # Spot FX has no consolidated tape: volume must stay absent, never a fake zero.
+    assert first.volume is None
+    assert first.source == "tiingo_fx"
+    assert first.symbol == "USDCOP"
+    assert first.raw == row
+    assert [c.ts for c in candles] == sorted(c.ts for c in candles)
+
+
+def test_tiingo_fx_lowercases_ticker_in_url() -> None:
+    session = FakeSession([FakeResponse(payload=[])])
+    client = TiingoFxClient(session=session, api_key="test-token")  # type: ignore[arg-type]
+
+    client.fetch_candles(
+        "USDCOP", datetime(2026, 8, 1, tzinfo=UTC), datetime(2026, 8, 2, tzinfo=UTC)
+    )
+
+    call = session.calls[0]
+    assert "tiingo/fx/usdcop/prices" in call["url"]
+    assert call["params"]["resampleFreq"] == "1day"
+    assert call["params"]["token"] == "test-token"
+
+
 # --- Factory --------------------------------------------------------------------
 
 
@@ -309,6 +371,8 @@ def make_asset(symbol: str = "BTC-USD") -> AssetConfig:
     return AssetConfig(
         symbol=symbol,
         asset_class="crypto",
+        region="global",
+        name=symbol,
         sources=SourcesConfig(primary="coinbase", reconcile="kraken"),
         backfill_start="2022-01-01",
     )

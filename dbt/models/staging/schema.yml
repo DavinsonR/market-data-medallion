@@ -11,7 +11,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: ["coinbase", "kraken", "tiingo"]
+                values: ["coinbase", "kraken", "tiingo", "tiingo_fx"]
       - name: symbol
         data_tests:
           - not_null
@@ -30,12 +30,19 @@ models:
       - name: close
         data_tests: [not_null]
       - name: volume
-        data_tests: [not_null]
+        description: >
+          NULL for tiingo_fx only: spot FX is OTC, so the payload carries no volume key.
+          The test is kept (scoped away from FX rather than deleted) because it is the
+          guard that caught the Kraken payload-shape bug.
+        data_tests:
+          - not_null:
+              config:
+                where: "source != 'tiingo_fx'"
 
   - name: stg_ohlcv
     description: >
       Canonical candle series deduplicated to one row per (symbol, ts) with source
-      priority coinbase > kraken > tiingo.
+      priority coinbase > kraken > tiingo > tiingo_fx.
     data_tests:
       - unique_combination:
           arguments:
@@ -47,6 +54,13 @@ models:
       - name: symbol
         data_tests:
           - not_null
+          # Every ingested symbol must exist in the catalog: an unknown symbol here
+          # means bronze holds data for something config.yaml no longer describes,
+          # which would otherwise vanish silently from the marts.
+          - relationships:
+              arguments:
+                to: ref('dim_assets')
+                field: symbol
       - name: ts
         data_tests:
           - not_null
@@ -55,4 +69,4 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: ["coinbase", "kraken", "tiingo"]
+                values: ["coinbase", "kraken", "tiingo", "tiingo_fx"]

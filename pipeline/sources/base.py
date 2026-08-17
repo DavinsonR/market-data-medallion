@@ -22,6 +22,15 @@ class MissingApiKeyError(SourceError):
     """A required API key is not configured; the source should be skipped."""
 
 
+class RateLimitError(SourceError):
+    """The source refused the call with HTTP 429.
+
+    Free tiers meter per hour, so retrying within a run cannot succeed and only
+    burns more quota. Callers must fail fast and let the next scheduled run
+    resume from the bronze watermark.
+    """
+
+
 @runtime_checkable
 class SourceClient(Protocol):
     """Fetches daily candles for a canonical symbol within [start, end]."""
@@ -46,7 +55,10 @@ def request_json(
     for attempt in range(1, max_tries + 1):
         response = session.get(url, params=params, headers=headers, timeout=timeout)
         last_status = response.status_code
-        if last_status == 429 or last_status >= 500:
+        if last_status == 429:
+            # Hourly quota: retrying now cannot succeed and costs more quota.
+            raise RateLimitError(f"GET {url} refused with HTTP 429 (rate limited)")
+        if last_status >= 500:
             if attempt < max_tries:
                 delay = BACKOFF_SECONDS if backoff_seconds is None else backoff_seconds
                 time.sleep(delay * 2 ** (attempt - 1))
@@ -57,10 +69,11 @@ def request_json(
 
 
 def get_client(name: str) -> SourceClient:
-    """Return the client registered under ``name``: coinbase, kraken, or tiingo."""
+    """Return the client registered under ``name``: coinbase, kraken, tiingo, tiingo_fx."""
     from pipeline.sources.coinbase import CoinbaseClient
     from pipeline.sources.kraken import KrakenClient
     from pipeline.sources.tiingo import TiingoClient
+    from pipeline.sources.tiingo_fx import TiingoFxClient
 
     if name == "coinbase":
         return CoinbaseClient()
@@ -68,4 +81,6 @@ def get_client(name: str) -> SourceClient:
         return KrakenClient()
     if name == "tiingo":
         return TiingoClient()
+    if name == "tiingo_fx":
+        return TiingoFxClient()
     raise ValueError(f"Unknown source: {name!r}")

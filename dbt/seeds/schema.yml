@@ -1,0 +1,45 @@
+version: 2
+
+seeds:
+  - name: dim_assets
+    description: >
+      Asset catalog: one row per configured instrument, materialized at silver.dim_assets.
+      Generated from config.yaml (the single source of truth for the asset universe) — never
+      hand-edited. Regenerate after changing config.yaml with:
+
+        .venv/bin/python -c "import csv; from pipeline.config import REPO_ROOT, load_config;
+        rows=[(a.symbol, a.asset_class, a.region, a.name, str(a.has_volume).lower())
+        for a in load_config().assets];
+        f=(REPO_ROOT/'dbt/seeds/dim_assets.csv').open('w', newline='');
+        w=csv.writer(f, lineterminator='\n');
+        w.writerow(['symbol','asset_class','region','name','has_volume']); w.writerows(rows); f.close()"
+
+      This table replaces the old ``symbol like '%-USD'`` heuristic, which misclassified FX
+      pairs such as USDCOP as crypto.
+    columns:
+      - name: symbol
+        description: "Canonical symbol, identical to the one written to bronze.raw_candles."
+        data_tests:
+          - not_null
+          - unique
+      - name: asset_class
+        description: "Drives annualization (crypto 365 vs 252) and the expected-days calendar."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["crypto", "equity", "fx"]
+      - name: region
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["us", "latam", "emerging", "global"]
+      - name: name
+        description: "Human-readable instrument name for dashboards and the exported JSON."
+        data_tests:
+          - not_null
+      - name: has_volume
+        description: "False only for FX: spot FX is OTC and has no consolidated volume tape."
+        data_tests:
+          - not_null

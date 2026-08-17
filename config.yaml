@@ -1,29 +1,79 @@
 # Declarative pipeline configuration — the single place to add assets or strategies.
+#
+# Asset classes drive annualization (periods_per_year) and which strategies apply:
+#   crypto  -> 365 trading days/year, has volume
+#   equity  -> 252 trading days/year, has volume
+#   fx      -> 252 trading days/year, NO volume (spot FX is OTC; no centralized tape)
+#
+# Tiingo free tier allows 50 requests/hour and 500 unique symbols/month. The 43
+# Tiingo symbols below fit one hourly window; ingestion tolerates partial failures
+# and self-heals on the next run via the bronze watermark.
 granularity: "1d"
 
+defaults:
+  backfill_start: "2022-01-01"
+
 assets:
-  - symbol: BTC-USD
-    asset_class: crypto            # crypto -> 365 trading days/year for annualization
-    sources:
-      primary: coinbase
-      reconcile: kraken            # cross-exchange reconciliation in gold
-    backfill_start: "2022-01-01"
-  - symbol: ETH-USD
-    asset_class: crypto
-    sources:
-      primary: coinbase
-      reconcile: kraken
-    backfill_start: "2022-01-01"
-  - symbol: SPY
-    asset_class: equity            # equity -> 252 trading days/year
-    sources:
-      primary: tiingo              # requires TIINGO_API_KEY; skipped with a warning if unset
-    backfill_start: "2022-01-01"
-  - symbol: QQQ
-    asset_class: equity
-    sources:
-      primary: tiingo
-    backfill_start: "2022-01-01"
+  # ── Crypto (Coinbase primary, Kraken for cross-exchange reconciliation) ────────
+  - { symbol: BTC-USD, asset_class: crypto, region: global, name: Bitcoin,
+      sources: { primary: coinbase, reconcile: kraken } }
+  - { symbol: ETH-USD, asset_class: crypto, region: global, name: Ethereum,
+      sources: { primary: coinbase, reconcile: kraken } }
+
+  # ── Broad-market ETFs ─────────────────────────────────────────────────────────
+  - { symbol: SPY, asset_class: equity, region: us, name: SPDR S&P 500 ETF, sources: { primary: tiingo } }
+  - { symbol: QQQ, asset_class: equity, region: us, name: Invesco QQQ (Nasdaq 100), sources: { primary: tiingo } }
+  - { symbol: DIA, asset_class: equity, region: us, name: SPDR Dow Jones Industrial Average ETF, sources: { primary: tiingo } }
+  - { symbol: IWM, asset_class: equity, region: us, name: iShares Russell 2000 ETF, sources: { primary: tiingo } }
+  - { symbol: VTI, asset_class: equity, region: us, name: Vanguard Total Stock Market ETF, sources: { primary: tiingo } }
+
+  # ── International / emerging-market ETFs ──────────────────────────────────────
+  - { symbol: EFA, asset_class: equity, region: global, name: iShares MSCI EAFE ETF, sources: { primary: tiingo } }
+  - { symbol: EEM, asset_class: equity, region: emerging, name: iShares MSCI Emerging Markets ETF, sources: { primary: tiingo } }
+  - { symbol: VWO, asset_class: equity, region: emerging, name: Vanguard Emerging Markets ETF, sources: { primary: tiingo } }
+  - { symbol: ILF, asset_class: equity, region: latam, name: iShares Latin America 40 ETF, sources: { primary: tiingo } }
+  - { symbol: EWZ, asset_class: equity, region: latam, name: iShares MSCI Brazil ETF, sources: { primary: tiingo } }
+  - { symbol: EWW, asset_class: equity, region: latam, name: iShares MSCI Mexico ETF, sources: { primary: tiingo } }
+  - { symbol: ECH, asset_class: equity, region: latam, name: iShares MSCI Chile ETF, sources: { primary: tiingo } }
+
+  # ── Sector and asset-class ETFs ───────────────────────────────────────────────
+  - { symbol: XLE, asset_class: equity, region: us, name: Energy Select Sector SPDR, sources: { primary: tiingo } }
+  - { symbol: XLF, asset_class: equity, region: us, name: Financial Select Sector SPDR, sources: { primary: tiingo } }
+  - { symbol: XLK, asset_class: equity, region: us, name: Technology Select Sector SPDR, sources: { primary: tiingo } }
+  - { symbol: XLV, asset_class: equity, region: us, name: Health Care Select Sector SPDR, sources: { primary: tiingo } }
+  - { symbol: TLT, asset_class: equity, region: us, name: iShares 20+ Year Treasury Bond ETF, sources: { primary: tiingo } }
+  - { symbol: HYG, asset_class: equity, region: us, name: iShares iBoxx High Yield Corporate Bond ETF, sources: { primary: tiingo } }
+  - { symbol: GLD, asset_class: equity, region: global, name: SPDR Gold Shares, sources: { primary: tiingo } }
+  - { symbol: SLV, asset_class: equity, region: global, name: iShares Silver Trust, sources: { primary: tiingo } }
+
+  # ── FX (Tiingo FX endpoint; OHLC only, no volume) ─────────────────────────────
+  - { symbol: USDCOP, asset_class: fx, region: latam, name: US Dollar / Colombian Peso, sources: { primary: tiingo_fx } }
+  - { symbol: USDBRL, asset_class: fx, region: latam, name: US Dollar / Brazilian Real, sources: { primary: tiingo_fx } }
+  - { symbol: EURUSD, asset_class: fx, region: global, name: Euro / US Dollar, sources: { primary: tiingo_fx } }
+
+  # ── US large caps ─────────────────────────────────────────────────────────────
+  - { symbol: AAPL,  asset_class: equity, region: us, name: Apple Inc, sources: { primary: tiingo } }
+  - { symbol: MSFT,  asset_class: equity, region: us, name: Microsoft Corp, sources: { primary: tiingo } }
+  - { symbol: NVDA,  asset_class: equity, region: us, name: NVIDIA Corp, sources: { primary: tiingo } }
+  - { symbol: AMZN,  asset_class: equity, region: us, name: Amazon.com Inc, sources: { primary: tiingo } }
+  - { symbol: GOOGL, asset_class: equity, region: us, name: Alphabet Inc, sources: { primary: tiingo } }
+  - { symbol: META,  asset_class: equity, region: us, name: Meta Platforms Inc, sources: { primary: tiingo } }
+  - { symbol: JPM,   asset_class: equity, region: us, name: JPMorgan Chase & Co, sources: { primary: tiingo } }
+  - { symbol: XOM,   asset_class: equity, region: us, name: Exxon Mobil Corp, sources: { primary: tiingo } }
+  - { symbol: JNJ,   asset_class: equity, region: us, name: Johnson & Johnson, sources: { primary: tiingo } }
+  - { symbol: WMT,   asset_class: equity, region: us, name: Walmart Inc, sources: { primary: tiingo } }
+
+  # ── Latin American ADRs (NYSE/NASDAQ-listed; no local-exchange feed on free tier)
+  - { symbol: EC,   asset_class: equity, region: latam, name: Ecopetrol SA (Colombia), sources: { primary: tiingo } }
+  - { symbol: CIB,  asset_class: equity, region: latam, name: Bancolombia SA (Colombia), sources: { primary: tiingo } }
+  - { symbol: VALE, asset_class: equity, region: latam, name: Vale SA (Brazil), sources: { primary: tiingo } }
+  - { symbol: PBR,  asset_class: equity, region: latam, name: Petrobras (Brazil), sources: { primary: tiingo } }
+  - { symbol: ITUB, asset_class: equity, region: latam, name: Itau Unibanco (Brazil), sources: { primary: tiingo } }
+  - { symbol: ABEV, asset_class: equity, region: latam, name: Ambev SA (Brazil), sources: { primary: tiingo } }
+  - { symbol: AMX,  asset_class: equity, region: latam, name: America Movil (Mexico), sources: { primary: tiingo } }
+  - { symbol: FMX,  asset_class: equity, region: latam, name: Fomento Economico Mexicano (Mexico), sources: { primary: tiingo } }
+  - { symbol: BAP,  asset_class: equity, region: latam, name: Credicorp Ltd (Peru), sources: { primary: tiingo } }
+  - { symbol: SQM,  asset_class: equity, region: latam, name: Sociedad Quimica y Minera (Chile), sources: { primary: tiingo } }
 
 backtest:
   initial_cash: 10000
@@ -38,7 +88,10 @@ backtest:
       params: { period: 14, entry_below: 30, exit_above: 50 }
     - name: volume_breakout
       params: { price_window: 20, volume_window: 20, volume_mult: 1.5 }
+      requires_volume: true        # skipped for FX, which has no volume
 
 export:
-  path: exports/trading_sim.json
+  dir: exports
+  index_file: index.json           # light: every asset + headline metrics
+  per_symbol_dir: backtests        # exports/backtests/<SYMBOL>.json (equity curves)
   equity_curve_max_points: 400

@@ -23,7 +23,9 @@ class Candle:
     high: float
     low: float
     close: float
-    volume: float
+    # Spot FX trades OTC with no centralized tape, so volume is genuinely absent
+    # there — None, never a fabricated zero.
+    volume: float | None
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -40,3 +42,6 @@ class IngestResult:
     rows_inserted: int
     status: str  # 'success' | 'failed'
     error: str | None = None
+    # True when the source refused with HTTP 429: not a transient fault, so the
+    # caller must stop hitting that source for the rest of the run.
+    rate_limited: bool = False

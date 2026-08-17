@@ -1,11 +1,15 @@
 -- Per-symbol completeness and quality report over the canonical series.
--- expected_days counts calendar days for crypto and weekdays for equities
--- (equity symbols come from Tiingo and have no weekend bars; holidays are
+-- Asset class and region come from the dim_assets catalog (generated from
+-- config.yaml), never from the symbol string: the old `symbol like '%-USD'`
+-- heuristic classified the FX pair USDCOP as crypto.
+-- expected_days counts calendar days for crypto and weekdays for everything
+-- else (equities and FX both follow a Mon-Fri calendar; holidays are
 -- intentionally not modeled, so a small missing_days residual is normal).
 -- max_gap_days is the largest distance in days between consecutive candles
 -- (1 = contiguous; a value of 3 means 2 days are missing in between).
--- Asset class is derived from the canonical symbol convention: crypto pairs
--- are quoted as XXX-USD, equities as bare tickers.
+-- The join to the catalog is INNER on purpose: a symbol ingested without a
+-- catalog entry is a configuration bug, and the `relationships` test on
+-- stg_ohlcv.symbol fails loudly for it instead of it appearing here unclassified.
 
 with candles as (
 
@@ -22,17 +26,19 @@ with candles as (
 per_symbol as (
 
     select
-        symbol,
-        case when symbol like '%-USD' then 'crypto' else 'equity' end as asset_class,
-        min(ts) as first_ts,
-        max(ts) as last_ts,
-        min(candle_date) as first_date,
-        max(candle_date) as last_date,
+        c.symbol,
+        a.asset_class,
+        a.region,
+        min(c.ts) as first_ts,
+        max(c.ts) as last_ts,
+        min(c.candle_date) as first_date,
+        max(c.candle_date) as last_date,
         count(*) as actual_days,
-        count(*) filter (where has_null_price) as n_null_price,
-        count(*) filter (where is_zero_volume) as n_zero_volume
-    from candles
-    group by 1, 2
+        count(*) filter (where c.has_null_price) as n_null_price,
+        count(*) filter (where c.is_zero_volume) as n_zero_volume
+    from candles c
+    inner join {{ ref('dim_assets') }} a on c.symbol = a.symbol
+    group by 1, 2, 3
 
 ),
 
@@ -68,6 +74,7 @@ expected as (
 select
     p.symbol,
     p.asset_class,
+    p.region,
     p.first_ts,
     p.last_ts,
     e.expected_days,

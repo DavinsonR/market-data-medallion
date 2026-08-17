@@ -1,8 +1,11 @@
 -- Typed OHLCV per (source, symbol, ts), parsed from the bronze payload JSONB.
 -- Payload shapes differ by source (all labeled dicts; kraken numbers arrive as JSON strings):
---   coinbase: {"time", "low", "high", "open", "close", "volume"}
---   kraken:   {"time", "open", "high", "low", "close", "vwap", "volume", "count"}
---   tiingo:   {"date", "open", "high", "low", "close", "volume", "adjClose", ...}
+--   coinbase:  {"time", "low", "high", "open", "close", "volume"}
+--   kraken:    {"time", "open", "high", "low", "close", "vwap", "volume", "count"}
+--   tiingo:    {"date", "open", "high", "low", "close", "volume", "adjClose", ...}
+--   tiingo_fx: {"date", "ticker", "open", "high", "low", "close"}  -- no volume key
+-- Spot FX is OTC with no consolidated tape, so `payload ->> 'volume'` is legitimately
+-- NULL for tiingo_fx; the not_null test on volume is scoped to exclude that source.
 -- The bar timestamp is taken from the typed candle_ts column, not re-parsed from the payload.
 
 with raw as (

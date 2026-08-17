@@ -7,6 +7,7 @@ profile: medallion
 
 model-paths: ["models"]
 macro-paths: ["macros"]
+seed-paths: ["seeds"]
 test-paths: ["tests"]
 
 target-path: target
@@ -21,3 +22,16 @@ models:
       +schema: silver
     marts:
       +schema: gold
+
+# The generate_schema_name override applies to seeds too, so +schema: silver
+# lands the catalog at exactly silver.dim_assets (no target-schema prefix).
+seeds:
+  medallion:
+    +schema: silver
+    dim_assets:
+      +column_types:
+        symbol: text
+        asset_class: text
+        region: text
+        name: text
+        has_volume: boolean

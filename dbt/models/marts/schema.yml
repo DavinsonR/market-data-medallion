@@ -37,7 +37,7 @@ models:
   - name: mart_data_quality
     description: >
       Per-symbol completeness report: expected vs actual days, gaps, and counts of
-      null-price / zero-volume bars.
+      null-price / zero-volume bars. Asset class and region are joined from dim_assets.
     columns:
       - name: symbol
         data_tests:
@@ -47,14 +47,72 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: ["crypto", "equity"]
+                values: ["crypto", "equity", "fx"]
+      - name: region
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["us", "latam", "emerging", "global"]
 
   - name: mart_asset_summary
     description: >
-      One row per symbol: latest close, 30-day return, annualized 30-day volatility,
-      last candle timestamp and staleness flag.
+      One row per symbol: asset class and region from the catalog, latest close, 30-day
+      return, annualized 30-day volatility, last candle timestamp and staleness flag.
     columns:
       - name: symbol
         data_tests:
           - not_null
           - unique
+      - name: asset_class
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["crypto", "equity", "fx"]
+      - name: region
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["us", "latam", "emerging", "global"]
+
+  - name: mart_strategy_leaderboard
+    description: >
+      Strategy-vs-buy-and-hold scoreboard built from the latest backtest run per
+      (symbol, strategy). Two grouping levels share the relation: detail rows at the
+      (strategy, asset_class, region) grain (is_grand_total = false) and one per-strategy
+      total across all classes and regions (is_grand_total = true, asset_class = 'ALL',
+      region = 'ALL'). Empty until the backtest engine has written to gold.backtest_runs.
+    data_tests:
+      - unique_combination:
+          arguments:
+            combination: [strategy, asset_class, region]
+    columns:
+      - name: strategy
+        data_tests:
+          - not_null
+      - name: asset_class
+        description: "Catalog asset class, or 'ALL' on the per-strategy total row."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["crypto", "equity", "fx", "ALL"]
+      - name: region
+        description: "Catalog region, or 'ALL' on the per-strategy total row."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["us", "latam", "emerging", "global", "ALL"]
+      - name: is_grand_total
+        description: "True on the per-strategy roll-up row; false on the detail rows."
+        data_tests:
+          - not_null
+      - name: n_backtests
+        data_tests:
+          - not_null
+      - name: beat_rate
+        description: >
+          n_beat_buy_hold / n_backtests. Range-checked in
+          tests/assert_leaderboard_beat_rate_range.sql.
+        data_tests:
+          - not_null

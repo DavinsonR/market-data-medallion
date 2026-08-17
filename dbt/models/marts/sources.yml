@@ -1,0 +1,17 @@
+version: 2
+
+sources:
+  - name: gold_engine
+    description: >
+      Gold relations written by the Python backtest engine rather than by dbt. The tables are
+      created by db/migrations/001_init.sql, so they always exist — models that read them build
+      fine (empty) on a freshly migrated database.
+    schema: gold
+    tables:
+      - name: backtest_runs
+        description: >
+          One row per backtest execution: (symbol, strategy) plus params, cost assumptions and
+          the resulting performance metrics. Re-runs append, so consumers must pick the latest
+          executed_at per (symbol, strategy).
+      - name: backtest_equity_curves
+        description: "Per-bar equity and buy-and-hold equity for each backtest_run_id."
