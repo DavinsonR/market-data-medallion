@@ -34,6 +34,7 @@ from pipeline.config import (
 )
 from pipeline.models import IngestResult
 from pipeline.quality import validate_ohlcv
+from pipeline.retention import prune_backtest_history
 from pipeline.sources import MissingApiKeyError
 
 # Sources that need TIINGO_API_KEY; skipped with a warning when it is absent.
@@ -237,6 +238,12 @@ def daily_flow() -> None:
         )
 
     refresh_leaderboard()
+
+    # Bound the derived data before it outgrows the free tier (see pipeline.retention).
+    with psycopg.connect(database_url()) as conn:
+        pruned = prune_backtest_history(conn)
+    if pruned:
+        logger.info("pruned %d superseded backtest runs", pruned)
 
     index_path = export.export_json(cfg)
     logger.info(
