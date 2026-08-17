@@ -6,8 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # commit refreshed exports/*.json
-  actions: write # keepalive-workflow re-enables the schedule via the API
+  contents: write # commit refreshed exports/*.json — nothing else is needed
 
 concurrency:
   group: daily-refresh
@@ -88,5 +87,10 @@ jobs:
             echo "SUPABASE_URL not set, skipping ping"
           fi
 
-      - name: Keep scheduled workflow alive
-        uses: gautamkrishnar/keepalive-workflow@v2
+      # No keep-alive action here on purpose. GitHub disables a public repo's
+      # scheduled workflows after 60 days without repository activity, and the
+      # commit step above is that activity: the export embeds `generated_at`, so
+      # every successful run produces a commit. A third-party keep-alive action
+      # was used until it was blocked by GitHub for a ToS violation and took the
+      # whole job down with it — the runner cannot even start a job whose actions
+      # it cannot resolve. One less dependency that can disappear.

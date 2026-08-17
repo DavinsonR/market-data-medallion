@@ -295,9 +295,12 @@ warning and the crypto pipeline still runs end to end.
 - **[`daily.yml`](.github/workflows/daily.yml)** — the scheduled refresh: runs the Prefect flow
   and `dbt build` against the hosted database, exports JSON, and auto-commits `exports/*.json`
   when the data changed (`data: daily refresh [skip ci]`). It exits cleanly with a log message on
-  forks/clones where secrets are not configured, pings Supabase's REST endpoint to keep the
-  free-tier database awake, and uses a keepalive step so GitHub's 60-day inactivity rule never
-  silently disables the schedule.
+  forks/clones where secrets are not configured, and pings Supabase's REST endpoint to keep the
+  free-tier database awake. GitHub disables a public repo's scheduled workflows after 60 days
+  without repository activity; the auto-commit above *is* that activity, because the export
+  embeds its generation timestamp and therefore changes on every run. No third-party keep-alive
+  action is used: the one this project started with was later blocked by GitHub for a ToS
+  violation, and a job whose actions cannot be resolved fails before its first step.
 
 ## Repository structure
 
