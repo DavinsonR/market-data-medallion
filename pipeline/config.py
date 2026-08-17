@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import yaml
 from dotenv import load_dotenv
@@ -146,12 +146,18 @@ def tiingo_api_key() -> str | None:
 
 
 def dbt_env() -> dict[str, str]:
-    """Discrete connection vars for dbt, derived from DATABASE_URL."""
+    """Discrete connection vars for dbt, derived from DATABASE_URL.
+
+    ``sslmode`` follows the URL's query string when present; managed providers
+    need TLS while the local development server has none.
+    """
     u = urlparse(database_url())
+    sslmode = parse_qs(u.query).get("sslmode", ["prefer"])[0]
     return {
         "MDM_PG_HOST": u.hostname or "localhost",
         "MDM_PG_PORT": str(u.port or 5432),
         "MDM_PG_USER": unquote(u.username) if u.username else "mdm",
         "MDM_PG_PASSWORD": unquote(u.password) if u.password else "",
         "MDM_PG_DB": unquote((u.path or "/mdm").lstrip("/")),
+        "MDM_PG_SSLMODE": sslmode,
     }

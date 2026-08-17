@@ -68,6 +68,8 @@ jobs:
             echo "applying $f"
             psql "postgresql://mdm@localhost:5432/mdm" -v ON_ERROR_STOP=1 -f "$f"
           done
+        env:
+          PGSSLMODE: disable
 
       - name: Seed deterministic bronze fixtures
         run: psql "postgresql://mdm@localhost:5432/mdm" -v ON_ERROR_STOP=1 -f tests/fixtures/seed_bronze.sql
