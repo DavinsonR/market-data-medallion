@@ -229,6 +229,50 @@ models:
               arguments:
                 values: ["us", "latam", "emerging", "global"]
 
+  - name: mart_fx_decomposition
+    description: >
+      FX decomposition of the Latin American ADRs' USD returns: one row per
+      (adr_symbol, window_label) for the windows 30d/90d/365d/full. usd_return is the
+      ADR's own price return; fx_return is the return of the USDXXX rate (local units
+      per 1 USD, so positive = local currency depreciated); local_return is the
+      synthetic local-currency return (1+usd)(1+fx)-1; fx_drag_pp = usd_return -
+      local_return (negative when the currency hurt the USD investor). Each series
+      anchors its own window (FX and NYSE calendars differ) and the four anchor
+      timestamps are emitted for auditability. Metrics are NULL when either series
+      lacks the window. The identity (1+usd)(1+fx) = (1+local) is enforced by
+      tests/assert_fx_decomposition_identity.sql.
+    data_tests:
+      - unique_combination:
+          arguments:
+            combination: [symbol, window_label]
+    columns:
+      - name: symbol
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_assets')
+                field: symbol
+      - name: fx_pair
+        description: "The ADR's home-currency pair from dim_assets; EURUSD can never appear."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["USDCOP", "USDBRL", "USDMXN", "USDPEN", "USDCLP"]
+      - name: window_label
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["30d", "90d", "365d", "full"]
+      - name: region
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["us", "latam", "emerging", "global"]
+
   - name: mart_overfitting_summary
     description: >
       The project's headline honesty metric, aggregated by combination size: how many

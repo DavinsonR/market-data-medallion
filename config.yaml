@@ -5,7 +5,7 @@
 #   equity  -> 252 trading days/year, has volume
 #   fx      -> 252 trading days/year, NO volume (spot FX is OTC; no centralized tape)
 #
-# Tiingo free tier allows 50 requests/hour and 500 unique symbols/month. The 43
+# Tiingo free tier allows 50 requests/hour and 500 unique symbols/month. The 46
 # Tiingo symbols below fit one hourly window; ingestion tolerates partial failures
 # and self-heals on the next run via the bronze watermark.
 granularity: "1d"
@@ -49,6 +49,9 @@ assets:
   # ── FX (Tiingo FX endpoint; OHLC only, no volume) ─────────────────────────────
   - { symbol: USDCOP, asset_class: fx, region: latam, name: US Dollar / Colombian Peso, sources: { primary: tiingo_fx } }
   - { symbol: USDBRL, asset_class: fx, region: latam, name: US Dollar / Brazilian Real, sources: { primary: tiingo_fx } }
+  - { symbol: USDMXN, asset_class: fx, region: latam, name: US Dollar / Mexican Peso, sources: { primary: tiingo_fx } }
+  - { symbol: USDCLP, asset_class: fx, region: latam, name: US Dollar / Chilean Peso, sources: { primary: tiingo_fx } }
+  - { symbol: USDPEN, asset_class: fx, region: latam, name: US Dollar / Peruvian Sol, sources: { primary: tiingo_fx } }
   - { symbol: EURUSD, asset_class: fx, region: global, name: Euro / US Dollar, sources: { primary: tiingo_fx } }
 
   # ── US large caps ─────────────────────────────────────────────────────────────
@@ -64,16 +67,18 @@ assets:
   - { symbol: WMT,   asset_class: equity, region: us, name: Walmart Inc, sources: { primary: tiingo } }
 
   # ── Latin American ADRs (NYSE/NASDAQ-listed; no local-exchange feed on free tier)
-  - { symbol: EC,   asset_class: equity, region: latam, name: Ecopetrol SA (Colombia), sources: { primary: tiingo } }
-  - { symbol: CIB,  asset_class: equity, region: latam, name: Bancolombia SA (Colombia), sources: { primary: tiingo } }
-  - { symbol: VALE, asset_class: equity, region: latam, name: Vale SA (Brazil), sources: { primary: tiingo } }
-  - { symbol: PBR,  asset_class: equity, region: latam, name: Petrobras (Brazil), sources: { primary: tiingo } }
-  - { symbol: ITUB, asset_class: equity, region: latam, name: Itau Unibanco (Brazil), sources: { primary: tiingo } }
-  - { symbol: ABEV, asset_class: equity, region: latam, name: Ambev SA (Brazil), sources: { primary: tiingo } }
-  - { symbol: AMX,  asset_class: equity, region: latam, name: America Movil (Mexico), sources: { primary: tiingo } }
-  - { symbol: FMX,  asset_class: equity, region: latam, name: Fomento Economico Mexicano (Mexico), sources: { primary: tiingo } }
-  - { symbol: BAP,  asset_class: equity, region: latam, name: Credicorp Ltd (Peru), sources: { primary: tiingo } }
-  - { symbol: SQM,  asset_class: equity, region: latam, name: Sociedad Quimica y Minera (Chile), sources: { primary: tiingo } }
+  # fx_pair maps each ADR to the Tiingo USDXXX rate of its home currency, feeding
+  # mart_fx_decomposition (how much of the USD return was the company vs the currency).
+  - { symbol: EC,   asset_class: equity, region: latam, name: Ecopetrol SA (Colombia), sources: { primary: tiingo }, fx_pair: USDCOP }
+  - { symbol: CIB,  asset_class: equity, region: latam, name: Bancolombia SA (Colombia), sources: { primary: tiingo }, fx_pair: USDCOP }
+  - { symbol: VALE, asset_class: equity, region: latam, name: Vale SA (Brazil), sources: { primary: tiingo }, fx_pair: USDBRL }
+  - { symbol: PBR,  asset_class: equity, region: latam, name: Petrobras (Brazil), sources: { primary: tiingo }, fx_pair: USDBRL }
+  - { symbol: ITUB, asset_class: equity, region: latam, name: Itau Unibanco (Brazil), sources: { primary: tiingo }, fx_pair: USDBRL }
+  - { symbol: ABEV, asset_class: equity, region: latam, name: Ambev SA (Brazil), sources: { primary: tiingo }, fx_pair: USDBRL }
+  - { symbol: AMX,  asset_class: equity, region: latam, name: America Movil (Mexico), sources: { primary: tiingo }, fx_pair: USDMXN }
+  - { symbol: FMX,  asset_class: equity, region: latam, name: Fomento Economico Mexicano (Mexico), sources: { primary: tiingo }, fx_pair: USDMXN }
+  - { symbol: BAP,  asset_class: equity, region: latam, name: Credicorp Ltd (Peru), sources: { primary: tiingo }, fx_pair: USDPEN }
+  - { symbol: SQM,  asset_class: equity, region: latam, name: Sociedad Quimica y Minera (Chile), sources: { primary: tiingo }, fx_pair: USDCLP }
 
 backtest:
   initial_cash: 10000

@@ -8,11 +8,12 @@ seeds:
       hand-edited. Regenerate after changing config.yaml with:
 
         .venv/bin/python -c "import csv; from pipeline.config import REPO_ROOT, load_config;
-        rows=[(a.symbol, a.asset_class, a.region, a.name, str(a.has_volume).lower())
+        rows=[(a.symbol, a.asset_class, a.region, a.name, str(a.has_volume).lower(), a.fx_pair or '')
         for a in load_config().assets];
         f=(REPO_ROOT/'dbt/seeds/dim_assets.csv').open('w', newline='');
         w=csv.writer(f, lineterminator='\n');
-        w.writerow(['symbol','asset_class','region','name','has_volume']); w.writerows(rows); f.close()"
+        w.writerow(['symbol','asset_class','region','name','has_volume','fx_pair']);
+        w.writerows(rows); f.close()"
 
       This table replaces the old ``symbol like '%-USD'`` heuristic, which misclassified FX
       pairs such as USDCOP as crypto.
@@ -43,3 +44,17 @@ seeds:
         description: "False only for FX: spot FX is OTC and has no consolidated volume tape."
         data_tests:
           - not_null
+      - name: fx_pair
+        description: >
+          Latin American ADRs only: the Tiingo USDXXX pair of the company's home currency
+          (e.g. EC -> USDCOP), NULL for every other asset. Quoted as local units per 1 USD,
+          which fixes the sign conventions of mart_fx_decomposition. EURUSD is quoted the
+          other way around (USD per EUR), maps to no ADR, and must never appear here.
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["USDCOP", "USDBRL", "USDMXN", "USDPEN", "USDCLP"]
+          - relationships:
+              arguments:
+                to: ref('dim_assets')
+                field: symbol

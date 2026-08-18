@@ -35,3 +35,4 @@ seeds:
         region: text
         name: text
         has_volume: boolean
+        fx_pair: text

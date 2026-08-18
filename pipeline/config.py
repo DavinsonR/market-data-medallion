@@ -42,6 +42,9 @@ class AssetConfig:
     name: str
     sources: SourcesConfig
     backfill_start: str
+    # Latin American ADRs only: the USDXXX rate of the home currency (e.g. EC -> USDCOP),
+    # used by mart_fx_decomposition to split the USD return into company vs currency.
+    fx_pair: str | None = None
 
     @property
     def periods_per_year(self) -> int:
@@ -128,6 +131,7 @@ def load_config(path: Path | None = None) -> AppConfig:
             name=a.get("name", a["symbol"]),
             sources=SourcesConfig(**a["sources"]),
             backfill_start=a.get("backfill_start") or defaults["backfill_start"],
+            fx_pair=a.get("fx_pair"),
         )
         for a in raw["assets"]
     ]

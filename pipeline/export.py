@@ -50,6 +50,14 @@ _LEADERBOARD_ORDER = ("strategy", "asset_class", "region")
 _COMBINATION_RELATION = "gold.mart_combination_analysis"
 _OVERFITTING_RELATION = "gold.mart_overfitting_summary"
 
+# ADR FX decomposition (10 ADRs x 4 windows = 40 rows), optional like the marts above.
+# The window order mirrors the mart's accepted_values so the array reads shortest-first.
+_FX_DECOMPOSITION_RELATION = "gold.mart_fx_decomposition"
+_FX_DECOMPOSITION_SQL = f"""
+SELECT * FROM {_FX_DECOMPOSITION_RELATION}
+ORDER BY symbol, array_position(ARRAY['30d', '90d', '365d', 'full'], window_label)
+"""
+
 # index.json is the first-paint payload of a static site, so its size is a hard requirement rather
 # than a hope: the payload is serialized, measured, and downgraded to the top combinations per
 # asset if it exceeds the budget. 600 KB is roughly two seconds on a slow 3G connection.
@@ -447,6 +455,15 @@ def _shape_overfitting(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {"by_n_components": by_size, "overall": overall}
 
 
+def _fetch_fx_decomposition(conn: psycopg.Connection) -> list[dict[str, Any]]:
+    """Read the ADR FX-decomposition mart, tolerating its absence like the other dbt marts."""
+    if not _relation_exists(conn, _FX_DECOMPOSITION_RELATION):
+        logger.warning("%s not found — exporting an empty fx_decomposition",
+                       _FX_DECOMPOSITION_RELATION)
+        return []
+    return _rows(conn, _FX_DECOMPOSITION_SQL)  # constant relation name, not user input
+
+
 def _fetch_overfitting(conn: psycopg.Connection) -> dict[str, Any] | None:
     """Read the dbt-owned overfitting mart, tolerating its absence exactly like the leaderboard."""
     if not _relation_exists(conn, _OVERFITTING_RELATION):
@@ -514,6 +531,7 @@ def export_json(cfg: AppConfig) -> Path:
         combinations = _fetch_combinations(conn, cfg, runs)
         overfitting = _fetch_overfitting(conn)
         leaderboard = _fetch_leaderboard(conn)
+        fx_decomposition = _fetch_fx_decomposition(conn)
         totals = _rows(conn, _TOTALS_SQL)[0]
         recent_ingest_runs = _rows(conn, _RECENT_INGEST_SQL)
 
@@ -531,6 +549,8 @@ def export_json(cfg: AppConfig) -> Path:
                 "name": a.name,
                 "asset_class": a.asset_class,
                 "region": a.region,
+                # ADRs carry their home-currency pair (config.yaml `fx_pair`); null otherwise.
+                "fx_pair": a.fx_pair,
                 "summary": summaries.get(a.symbol),
                 "data_quality": quality.get(a.symbol),
                 "reconciliation": recon.get(a.symbol),
@@ -555,6 +575,9 @@ def export_json(cfg: AppConfig) -> Path:
             "ranked_by": _COMBINATION_RANK_KEY,
             "full_detail": f"{cfg.export.per_symbol_dir}/<SYMBOL>.json",
         },
+        # The full FX-decomposition mart (10 ADRs x 4 windows = 40 rows, curve-free):
+        # small enough to ship whole, so the site never joins windows client-side.
+        "fx_decomposition": fx_decomposition,
         "overfitting": overfitting,
         "leaderboard": leaderboard,
         "pipeline": {"recent_ingest_runs": recent_ingest_runs, "totals": totals},

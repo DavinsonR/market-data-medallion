@@ -47,6 +47,9 @@ BACKTEST_MARTS = (
     "mart_strategy_leaderboard",
     "mart_combination_analysis",
     "mart_overfitting_summary",
+    # Depends only on silver + dim_assets, not on backtest_runs, but rebuilding it
+    # here is harmless and keeps the daily refresh to one list.
+    "mart_fx_decomposition",
 )
 
 INDICATORS_QUERY = """
