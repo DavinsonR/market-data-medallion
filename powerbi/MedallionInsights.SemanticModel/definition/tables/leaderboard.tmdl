@@ -1,0 +1,95 @@
+/// Strategy leaderboard (gold.mart_strategy_leaderboard) — aggregate grain
+/// (strategy x asset_class x region, plus grand totals). Standalone.
+table leaderboard
+
+	column strategy
+		dataType: string
+		summarizeBy: none
+		sourceColumn: strategy
+
+	column strategy_kind
+		dataType: string
+		summarizeBy: none
+		sourceColumn: strategy_kind
+
+	column n_components
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: n_components
+
+	column asset_class
+		dataType: string
+		summarizeBy: none
+		sourceColumn: asset_class
+
+	column region
+		dataType: string
+		summarizeBy: none
+		sourceColumn: region
+
+	column is_grand_total
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: is_grand_total
+
+	column n_backtests
+		dataType: int64
+		summarizeBy: sum
+		sourceColumn: n_backtests
+
+	column n_beat_buy_hold
+		dataType: int64
+		summarizeBy: sum
+		sourceColumn: n_beat_buy_hold
+
+	column beat_rate
+		dataType: double
+		summarizeBy: average
+		sourceColumn: beat_rate
+		formatString: 0.0%
+
+	column avg_total_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: avg_total_return
+		formatString: +0.0%;-0.0%;0.0%
+
+	column avg_buy_hold_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: avg_buy_hold_return
+		formatString: +0.0%;-0.0%;0.0%
+
+	column avg_excess_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: avg_excess_return
+		formatString: +0.0%;-0.0%;0.0%
+
+	column median_sharpe
+		dataType: double
+		summarizeBy: average
+		sourceColumn: median_sharpe
+		formatString: 0.00
+
+	column avg_max_drawdown
+		dataType: double
+		summarizeBy: average
+		sourceColumn: avg_max_drawdown
+		formatString: 0.0%
+
+	column oos_survival_rate
+		dataType: double
+		summarizeBy: average
+		sourceColumn: oos_survival_rate
+		formatString: 0.0%
+
+	partition leaderboard = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgHost, PgDatabase),
+					data = Source{[Schema="gold",Item="mart_strategy_leaderboard"]}[Data],
+					kept = Table.SelectColumns(data, {"strategy","strategy_kind","n_components","asset_class","region","is_grand_total","n_backtests","n_beat_buy_hold","beat_rate","avg_total_return","avg_buy_hold_return","avg_excess_return","median_sharpe","avg_max_drawdown","oos_survival_rate"}, MissingField.Ignore)
+				in
+					kept

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "scatterExposure",
+  "position": {
+    "x": 24,
+    "y": 138,
+    "z": 4,
+    "width": 610,
+    "height": 380
+  },
+  "visual": {
+    "visualType": "scatterChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "strategy"
+                }
+              },
+              "queryRef": "combination_analysis.strategy"
+            }
+          ]
+        },
+        "X": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "Avg Exposure"
+                }
+              },
+              "queryRef": "combination_analysis.Avg Exposure"
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "Avg OOS Excess Return"
+                }
+              },
+              "queryRef": "combination_analysis.Avg OOS Excess Return"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Exposure vs out-of-sample excess (each dot = a strategy)'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

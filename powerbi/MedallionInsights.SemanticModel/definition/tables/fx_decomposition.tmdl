@@ -1,0 +1,76 @@
+/// Company-vs-currency split for the 10 Latin American ADRs
+/// (gold.mart_fx_decomposition): (1 + r_usd) * (1 + r_fx) = (1 + r_local).
+/// fx_drag_pp = usd_return - local_return: negative when the local currency
+/// depreciated and subtracted from the USD investor's return.
+table fx_decomposition
+
+	measure 'USD Return' = AVERAGE('fx_decomposition'[usd_return])
+		formatString: +0.0%;-0.0%;0.0%
+
+	measure 'Local Return' = AVERAGE('fx_decomposition'[local_return])
+		formatString: +0.0%;-0.0%;0.0%
+
+	measure 'FX Move' = AVERAGE('fx_decomposition'[fx_return])
+		formatString: +0.0%;-0.0%;0.0%
+
+	measure 'FX Drag (pp)' = AVERAGE('fx_decomposition'[fx_drag_pp])
+		formatString: +0.0%;-0.0%;0.0%
+
+	column symbol
+		dataType: string
+		summarizeBy: none
+		sourceColumn: symbol
+
+	column region
+		dataType: string
+		summarizeBy: none
+		sourceColumn: region
+
+	column fx_pair
+		dataType: string
+		summarizeBy: none
+		sourceColumn: fx_pair
+
+	column window_label
+		dataType: string
+		summarizeBy: none
+		sourceColumn: window_label
+
+	column usd_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: usd_return
+		formatString: +0.0%;-0.0%;0.0%
+
+	column fx_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: fx_return
+		formatString: +0.0%;-0.0%;0.0%
+
+	column local_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: local_return
+		formatString: +0.0%;-0.0%;0.0%
+
+	column fx_drag_pp
+		dataType: double
+		summarizeBy: average
+		sourceColumn: fx_drag_pp
+		formatString: +0.0%;-0.0%;0.0%
+
+	column adr_end_ts
+		dataType: dateTime
+		summarizeBy: none
+		sourceColumn: adr_end_ts
+
+	partition fx_decomposition = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgHost, PgDatabase),
+					data = Source{[Schema="gold",Item="mart_fx_decomposition"]}[Data],
+					kept = Table.SelectColumns(data, {"symbol","region","fx_pair","window_label","usd_return","fx_return","local_return","fx_drag_pp","adr_end_ts"}, MissingField.Ignore)
+				in
+					kept

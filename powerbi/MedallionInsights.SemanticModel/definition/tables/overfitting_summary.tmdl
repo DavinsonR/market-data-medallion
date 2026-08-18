@@ -1,0 +1,62 @@
+/// The honesty aggregate (gold.mart_overfitting_summary): survival by component
+/// count plus a grand-total row. Standalone grain — deliberately unrelated.
+table overfitting_summary
+
+	column is_grand_total
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: is_grand_total
+
+	column n_components
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: n_components
+
+	column n_variants
+		dataType: int64
+		summarizeBy: sum
+		sourceColumn: n_variants
+
+	column n_beat_is
+		dataType: int64
+		summarizeBy: sum
+		sourceColumn: n_beat_is
+
+	column n_beat_is_and_oos
+		dataType: int64
+		summarizeBy: sum
+		sourceColumn: n_beat_is_and_oos
+
+	column oos_survival_rate
+		dataType: double
+		summarizeBy: average
+		sourceColumn: oos_survival_rate
+		formatString: 0.0%
+
+	column avg_exposure
+		dataType: double
+		summarizeBy: average
+		sourceColumn: avg_exposure
+		formatString: 0.0%
+
+	column avg_excess_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: avg_excess_return
+		formatString: +0.0%;-0.0%;0.0%
+
+	column avg_oos_excess_drop
+		dataType: double
+		summarizeBy: average
+		sourceColumn: avg_oos_excess_drop
+		formatString: +0.0%;-0.0%;0.0%
+
+	partition overfitting_summary = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgHost, PgDatabase),
+					data = Source{[Schema="gold",Item="mart_overfitting_summary"]}[Data],
+					kept = Table.SelectColumns(data, {"is_grand_total","n_components","n_variants","n_beat_is","n_beat_is_and_oos","oos_survival_rate","avg_exposure","avg_excess_return","avg_oos_excess_drop"}, MissingField.Ignore)
+				in
+					kept

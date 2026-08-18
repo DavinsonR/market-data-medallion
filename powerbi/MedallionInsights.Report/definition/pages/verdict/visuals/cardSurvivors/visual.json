@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "cardSurvivors",
+  "position": {
+    "x": 644,
+    "y": 24,
+    "z": 2,
+    "width": 290,
+    "height": 130
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "Winners IS & OOS"
+                }
+              },
+              "queryRef": "combination_analysis.Winners IS & OOS"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

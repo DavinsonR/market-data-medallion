@@ -1,0 +1,75 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "dragByAdr",
+  "position": {
+    "x": 24,
+    "y": 138,
+    "z": 2,
+    "width": 610,
+    "height": 420
+  },
+  "visual": {
+    "visualType": "clusteredBarChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fx_decomposition"
+                    }
+                  },
+                  "Property": "symbol"
+                }
+              },
+              "queryRef": "fx_decomposition.symbol"
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fx_decomposition"
+                    }
+                  },
+                  "Property": "FX Drag (pp)"
+                }
+              },
+              "queryRef": "fx_decomposition.FX Drag (pp)"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'What the currency did to the USD investor, by ADR'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

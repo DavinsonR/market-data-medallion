@@ -1,0 +1,20 @@
+/// Medallion Insights — semantic model over the market-data-medallion warehouse.
+/// Import mode against the Supabase session pooler; credentials are entered in
+/// Power BI Desktop on first refresh and are never stored in this repository.
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+
+annotation PBI_QueryOrder = ["PgHost","PgDatabase","dim_assets","asset_summary","combination_analysis","overfitting_summary","leaderboard","fx_decomposition","equity_curves"]
+
+ref table dim_assets
+ref table asset_summary
+ref table combination_analysis
+ref table overfitting_summary
+ref table leaderboard
+ref table fx_decomposition
+ref table equity_curves
+
+ref expression PgHost
+ref expression PgDatabase

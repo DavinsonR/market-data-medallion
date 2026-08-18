@@ -1,0 +1,88 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "curveChart",
+  "position": {
+    "x": 24,
+    "y": 138,
+    "z": 2,
+    "width": 1232,
+    "height": 540
+  },
+  "visual": {
+    "visualType": "lineChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "equity_curves"
+                    }
+                  },
+                  "Property": "ts"
+                }
+              },
+              "queryRef": "equity_curves.ts"
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "equity_curves"
+                    }
+                  },
+                  "Property": "Equity"
+                }
+              },
+              "queryRef": "equity_curves.Equity"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "equity_curves"
+                    }
+                  },
+                  "Property": "Buy & Hold Equity"
+                }
+              },
+              "queryRef": "equity_curves.Buy & Hold Equity"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Strategy vs buy & hold \u2014 pick one asset and one strategy'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

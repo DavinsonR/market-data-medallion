@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "cardBeatOOS",
+  "position": {
+    "x": 954,
+    "y": 24,
+    "z": 3,
+    "width": 302,
+    "height": 90
+  },
+  "visual": {
+    "visualType": "card",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "Beat B&H % (OOS)"
+                }
+              },
+              "queryRef": "combination_analysis.Beat B&H % (OOS)"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

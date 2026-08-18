@@ -1,0 +1,136 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "comboTable",
+  "position": {
+    "x": 24,
+    "y": 534,
+    "z": 6,
+    "width": 1232,
+    "height": 162
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "symbol"
+                }
+              },
+              "queryRef": "combination_analysis.symbol"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "strategy"
+                }
+              },
+              "queryRef": "combination_analysis.strategy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "n_components"
+                }
+              },
+              "queryRef": "combination_analysis.n_components"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "exposure"
+                }
+              },
+              "queryRef": "combination_analysis.exposure"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "excess_return"
+                }
+              },
+              "queryRef": "combination_analysis.excess_return"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "oos_excess_return"
+                }
+              },
+              "queryRef": "combination_analysis.oos_excess_return"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "beat_bh_oos"
+                }
+              },
+              "queryRef": "combination_analysis.beat_bh_oos"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Every variant'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

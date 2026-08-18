@@ -1,0 +1,123 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "fxTable",
+  "position": {
+    "x": 646,
+    "y": 138,
+    "z": 3,
+    "width": 610,
+    "height": 420
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fx_decomposition"
+                    }
+                  },
+                  "Property": "symbol"
+                }
+              },
+              "queryRef": "fx_decomposition.symbol"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fx_decomposition"
+                    }
+                  },
+                  "Property": "fx_pair"
+                }
+              },
+              "queryRef": "fx_decomposition.fx_pair"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fx_decomposition"
+                    }
+                  },
+                  "Property": "USD Return"
+                }
+              },
+              "queryRef": "fx_decomposition.USD Return"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fx_decomposition"
+                    }
+                  },
+                  "Property": "Local Return"
+                }
+              },
+              "queryRef": "fx_decomposition.Local Return"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fx_decomposition"
+                    }
+                  },
+                  "Property": "FX Move"
+                }
+              },
+              "queryRef": "fx_decomposition.FX Move"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fx_decomposition"
+                    }
+                  },
+                  "Property": "FX Drag (pp)"
+                }
+              },
+              "queryRef": "fx_decomposition.FX Drag (pp)"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'(1 + r_USD) x (1 + r_FX) = (1 + r_local)'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

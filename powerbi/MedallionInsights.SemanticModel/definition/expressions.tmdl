@@ -1,0 +1,6 @@
+/// Connection parameters. The session pooler resolves over IPv4 and supports the
+/// prepared statements the PostgreSQL connector issues; the direct db.<ref> host
+/// is IPv6-only and unreachable from many networks.
+expression PgHost = "aws-0-ca-central-1.pooler.supabase.com:5432" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+
+expression PgDatabase = "postgres" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]

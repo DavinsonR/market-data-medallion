@@ -1,0 +1,165 @@
+/// One row per (symbol, strategy variant): 222 singles + 1,125 AND-combinations,
+/// each scored on the full period and on the 70/30 train/validation split.
+/// The `components` TEXT[] column is dropped in M: the connector cannot type it.
+table combination_analysis
+
+	measure 'Variants Evaluated' = COUNTROWS('combination_analysis')
+		formatString: #,0
+
+	measure 'Winners In-Sample' = CALCULATE([Variants Evaluated], 'combination_analysis'[beat_bh_is] = TRUE())
+		formatString: #,0
+
+	measure 'Winners IS & OOS' = CALCULATE([Variants Evaluated], 'combination_analysis'[beat_bh_is] = TRUE(), 'combination_analysis'[beat_bh_oos] = TRUE())
+		formatString: #,0
+
+	/// The headline number: of the variants that beat buy & hold in training,
+	/// the share that kept beating it in the held-out window.
+	measure 'OOS Survival Rate' = DIVIDE([Winners IS & OOS], [Winners In-Sample])
+		formatString: 0.0%
+
+	measure 'Beat B&H % (full)' = DIVIDE(CALCULATE([Variants Evaluated], 'combination_analysis'[beat_bh_full] = TRUE()), [Variants Evaluated])
+		formatString: 0.0%
+
+	measure 'Beat B&H % (OOS)' = DIVIDE(CALCULATE([Variants Evaluated], 'combination_analysis'[beat_bh_oos] = TRUE()), [Variants Evaluated])
+		formatString: 0.0%
+
+	measure 'Avg Exposure' = AVERAGE('combination_analysis'[exposure])
+		formatString: 0.0%
+
+	measure 'Avg Excess Return' = AVERAGE('combination_analysis'[excess_return])
+		formatString: +0.0%;-0.0%;0.0%
+
+	measure 'Avg OOS Excess Return' = AVERAGE('combination_analysis'[oos_excess_return])
+		formatString: +0.0%;-0.0%;0.0%
+
+	measure 'Median Sharpe' = MEDIAN('combination_analysis'[sharpe])
+		formatString: 0.00
+
+	measure 'Zero-Trade Variants' = CALCULATE([Variants Evaluated], 'combination_analysis'[n_trades] = 0)
+		formatString: #,0
+
+	column symbol
+		dataType: string
+		summarizeBy: none
+		sourceColumn: symbol
+
+	column strategy
+		dataType: string
+		summarizeBy: none
+		sourceColumn: strategy
+
+	column strategy_kind
+		dataType: string
+		summarizeBy: none
+		sourceColumn: strategy_kind
+
+	column n_components
+		dataType: int64
+		summarizeBy: none
+		sourceColumn: n_components
+
+	column exposure
+		dataType: double
+		summarizeBy: average
+		sourceColumn: exposure
+		formatString: 0.0%
+
+	column total_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: total_return
+		formatString: 0.0%
+
+	column buy_hold_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: buy_hold_return
+		formatString: 0.0%
+
+	column excess_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: excess_return
+		formatString: +0.0%;-0.0%;0.0%
+
+	column sharpe
+		dataType: double
+		summarizeBy: average
+		sourceColumn: sharpe
+		formatString: 0.00
+
+	column max_drawdown
+		dataType: double
+		summarizeBy: average
+		sourceColumn: max_drawdown
+		formatString: 0.0%
+
+	column n_trades
+		dataType: int64
+		summarizeBy: average
+		sourceColumn: n_trades
+
+	column is_excess_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: is_excess_return
+		formatString: +0.0%;-0.0%;0.0%
+
+	column oos_excess_return
+		dataType: double
+		summarizeBy: average
+		sourceColumn: oos_excess_return
+		formatString: +0.0%;-0.0%;0.0%
+
+	column oos_excess_drop
+		dataType: double
+		summarizeBy: average
+		sourceColumn: oos_excess_drop
+		formatString: +0.0%;-0.0%;0.0%
+
+	column is_exposure
+		dataType: double
+		summarizeBy: average
+		sourceColumn: is_exposure
+		formatString: 0.0%
+
+	column oos_exposure
+		dataType: double
+		summarizeBy: average
+		sourceColumn: oos_exposure
+		formatString: 0.0%
+
+	column beat_bh_full
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: beat_bh_full
+
+	column beat_bh_is
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: beat_bh_is
+
+	column beat_bh_oos
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: beat_bh_oos
+
+	column executed_at
+		dataType: dateTime
+		summarizeBy: none
+		sourceColumn: executed_at
+
+	column split_ts
+		dataType: dateTime
+		summarizeBy: none
+		sourceColumn: split_ts
+
+	partition combination_analysis = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgHost, PgDatabase),
+					data = Source{[Schema="gold",Item="mart_combination_analysis"]}[Data],
+					noArray = Table.RemoveColumns(data, {"components"}, MissingField.Ignore)
+				in
+					noArray

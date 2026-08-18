@@ -1,0 +1,75 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "survivalByN",
+  "position": {
+    "x": 24,
+    "y": 178,
+    "z": 10,
+    "width": 610,
+    "height": 340
+  },
+  "visual": {
+    "visualType": "clusteredColumnChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "n_components"
+                }
+              },
+              "queryRef": "combination_analysis.n_components"
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "combination_analysis"
+                    }
+                  },
+                  "Property": "OOS Survival Rate"
+                }
+              },
+              "queryRef": "combination_analysis.OOS Survival Rate"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Out-of-sample survival by number of combined signals'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

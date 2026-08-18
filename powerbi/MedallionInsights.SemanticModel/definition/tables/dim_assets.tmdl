@@ -1,0 +1,41 @@
+/// Asset catalog (silver.dim_assets): 48 instruments across 4 classes and 4 regions.
+table dim_assets
+
+	column symbol
+		dataType: string
+		summarizeBy: none
+		sourceColumn: symbol
+
+	column asset_class
+		dataType: string
+		summarizeBy: none
+		sourceColumn: asset_class
+
+	column region
+		dataType: string
+		summarizeBy: none
+		sourceColumn: region
+
+	column name
+		dataType: string
+		summarizeBy: none
+		sourceColumn: name
+
+	column has_volume
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: has_volume
+
+	column fx_pair
+		dataType: string
+		summarizeBy: none
+		sourceColumn: fx_pair
+
+	partition dim_assets = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgHost, PgDatabase),
+					data = Source{[Schema="silver",Item="dim_assets"]}[Data]
+				in
+					data

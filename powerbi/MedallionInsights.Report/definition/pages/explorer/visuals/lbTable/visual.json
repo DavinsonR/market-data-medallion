@@ -1,0 +1,123 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "lbTable",
+  "position": {
+    "x": 646,
+    "y": 138,
+    "z": 5,
+    "width": 610,
+    "height": 380
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "leaderboard"
+                    }
+                  },
+                  "Property": "strategy"
+                }
+              },
+              "queryRef": "leaderboard.strategy"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "leaderboard"
+                    }
+                  },
+                  "Property": "n_backtests"
+                }
+              },
+              "queryRef": "leaderboard.n_backtests"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "leaderboard"
+                    }
+                  },
+                  "Property": "beat_rate"
+                }
+              },
+              "queryRef": "leaderboard.beat_rate"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "leaderboard"
+                    }
+                  },
+                  "Property": "avg_excess_return"
+                }
+              },
+              "queryRef": "leaderboard.avg_excess_return"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "leaderboard"
+                    }
+                  },
+                  "Property": "median_sharpe"
+                }
+              },
+              "queryRef": "leaderboard.median_sharpe"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "leaderboard"
+                    }
+                  },
+                  "Property": "oos_survival_rate"
+                }
+              },
+              "queryRef": "leaderboard.oos_survival_rate"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Leaderboard (filter is_grand_total = True for the 5-strategy view)'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

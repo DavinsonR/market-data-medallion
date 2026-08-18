@@ -1,0 +1,53 @@
+/// Latest state per asset (gold.mart_asset_summary).
+table asset_summary
+
+	column symbol
+		dataType: string
+		summarizeBy: none
+		sourceColumn: symbol
+
+	column asset_class
+		dataType: string
+		summarizeBy: none
+		sourceColumn: asset_class
+
+	column region
+		dataType: string
+		summarizeBy: none
+		sourceColumn: region
+
+	column latest_close
+		dataType: double
+		summarizeBy: average
+		sourceColumn: latest_close
+
+	column return_30d
+		dataType: double
+		summarizeBy: average
+		sourceColumn: return_30d
+		formatString: +0.0%;-0.0%;0.0%
+
+	column volatility_30d
+		dataType: double
+		summarizeBy: average
+		sourceColumn: volatility_30d
+		formatString: 0.0%
+
+	column last_candle_ts
+		dataType: dateTime
+		summarizeBy: none
+		sourceColumn: last_candle_ts
+
+	column is_stale
+		dataType: boolean
+		summarizeBy: none
+		sourceColumn: is_stale
+
+	partition asset_summary = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgHost, PgDatabase),
+					data = Source{[Schema="gold",Item="mart_asset_summary"]}[Data]
+				in
+					data

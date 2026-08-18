@@ -1,0 +1,43 @@
+/// Equity curves of the latest single-strategy runs (~270k rows): joined to the
+/// run metadata in SQL so the model gets symbol/strategy directly.
+table equity_curves
+
+	measure 'Equity' = AVERAGE('equity_curves'[equity])
+		formatString: $#,0
+
+	measure 'Buy & Hold Equity' = AVERAGE('equity_curves'[buy_hold_equity])
+		formatString: $#,0
+
+	column symbol
+		dataType: string
+		summarizeBy: none
+		sourceColumn: symbol
+
+	column strategy
+		dataType: string
+		summarizeBy: none
+		sourceColumn: strategy
+
+	column ts
+		dataType: dateTime
+		summarizeBy: none
+		sourceColumn: ts
+
+	column equity
+		dataType: double
+		summarizeBy: average
+		sourceColumn: equity
+
+	column buy_hold_equity
+		dataType: double
+		summarizeBy: average
+		sourceColumn: buy_hold_equity
+
+	partition equity_curves = m
+		mode: import
+		source =
+				let
+					Source = PostgreSQL.Database(PgHost, PgDatabase),
+					data = Value.NativeQuery(Source, "SELECT r.symbol, r.strategy, c.ts, c.equity::float8 AS equity, c.buy_hold_equity::float8 AS buy_hold_equity FROM gold.backtest_equity_curves c JOIN (SELECT DISTINCT ON (symbol, strategy) backtest_run_id, symbol, strategy FROM gold.backtest_runs WHERE has_curve ORDER BY symbol, strategy, executed_at DESC) r USING (backtest_run_id)", null, [EnableFolding=false])
+				in
+					data

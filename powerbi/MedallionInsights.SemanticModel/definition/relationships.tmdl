@@ -1,0 +1,15 @@
+relationship assets_to_combinations
+	fromColumn: combination_analysis.symbol
+	toColumn: dim_assets.symbol
+
+relationship assets_to_summary
+	fromColumn: asset_summary.symbol
+	toColumn: dim_assets.symbol
+
+relationship assets_to_fx
+	fromColumn: fx_decomposition.symbol
+	toColumn: dim_assets.symbol
+
+relationship assets_to_curves
+	fromColumn: equity_curves.symbol
+	toColumn: dim_assets.symbol

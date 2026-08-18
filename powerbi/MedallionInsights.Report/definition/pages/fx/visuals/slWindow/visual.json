@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "slWindow",
+  "position": {
+    "x": 24,
+    "y": 24,
+    "z": 0,
+    "width": 290,
+    "height": 90
+  },
+  "visual": {
+    "visualType": "slicer",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "fx_decomposition"
+                    }
+                  },
+                  "Property": "window_label"
+                }
+              },
+              "queryRef": "fx_decomposition.window_label"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.0.0/schema.json",
+  "name": "verdictTable",
+  "position": {
+    "x": 24,
+    "y": 534,
+    "z": 12,
+    "width": 1232,
+    "height": 162
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "overfitting_summary"
+                    }
+                  },
+                  "Property": "n_components"
+                }
+              },
+              "queryRef": "overfitting_summary.n_components"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "overfitting_summary"
+                    }
+                  },
+                  "Property": "n_variants"
+                }
+              },
+              "queryRef": "overfitting_summary.n_variants"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "overfitting_summary"
+                    }
+                  },
+                  "Property": "n_beat_is"
+                }
+              },
+              "queryRef": "overfitting_summary.n_beat_is"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "overfitting_summary"
+                    }
+                  },
+                  "Property": "n_beat_is_and_oos"
+                }
+              },
+              "queryRef": "overfitting_summary.n_beat_is_and_oos"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "overfitting_summary"
+                    }
+                  },
+                  "Property": "oos_survival_rate"
+                }
+              },
+              "queryRef": "overfitting_summary.oos_survival_rate"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "overfitting_summary"
+                    }
+                  },
+                  "Property": "avg_exposure"
+                }
+              },
+              "queryRef": "overfitting_summary.avg_exposure"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true,
+    "objects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'The honesty funnel, row by row'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
