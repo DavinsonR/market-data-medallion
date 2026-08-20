@@ -1,5 +1,6 @@
-/// Equity curves of the latest single-strategy runs (~270k rows): joined to the
-/// run metadata in SQL so the model gets symbol/strategy directly.
+/// Equity curves of the latest single-strategy runs (~283k rows), joined to the
+/// run metadata in M (no native SQL: Desktop gates native queries behind a
+/// per-query approval that breaks unattended refreshes).
 table equity_curves
 
 	/// Named 'Strategy Equity' (not 'Equity'): Tabular object names are
@@ -41,7 +42,31 @@ table equity_curves
 		mode: import
 		source =
 				let
+					// Pure M on purpose — no Value.NativeQuery. Power BI gates native
+					// database queries behind a per-query user approval
+					// (EvaluateNativeQueryUnpermitted on an unattended refresh), so the
+					// latest-run-per-(symbol, strategy) selection is done with
+					// standard folding-friendly M instead.
 					Source = PostgreSQL.Database(PgHost, PgDatabase),
-					data = Value.NativeQuery(Source, "SELECT r.symbol, r.strategy, c.ts, c.equity::float8 AS equity, c.buy_hold_equity::float8 AS buy_hold_equity FROM gold.backtest_equity_curves c JOIN (SELECT DISTINCT ON (symbol, strategy) backtest_run_id, symbol, strategy FROM gold.backtest_runs WHERE has_curve ORDER BY symbol, strategy, executed_at DESC) r USING (backtest_run_id)", null, [EnableFolding=false])
+					runs = Source{[Schema="gold",Item="backtest_runs"]}[Data],
+					withCurve = Table.SelectRows(runs, each [has_curve] = true),
+					slim = Table.SelectColumns(withCurve, {"backtest_run_id", "symbol", "strategy", "executed_at"}),
+					latest = Table.Group(
+						slim,
+						{"symbol", "strategy"},
+						{{"latest_run", each Table.First(Table.Sort(_, {{"executed_at", Order.Descending}})), type record}}
+					),
+					latestIds = Table.SelectColumns(
+						Table.ExpandRecordColumn(latest, "latest_run", {"backtest_run_id"}),
+						{"symbol", "strategy", "backtest_run_id"}
+					),
+					curves = Source{[Schema="gold",Item="backtest_equity_curves"]}[Data],
+					curvesSlim = Table.SelectColumns(curves, {"backtest_run_id", "ts", "equity", "buy_hold_equity"}),
+					joined = Table.NestedJoin(curvesSlim, {"backtest_run_id"}, latestIds, {"backtest_run_id"}, "run", JoinKind.Inner),
+					expanded = Table.ExpandTableColumn(joined, "run", {"symbol", "strategy"}),
+					typed = Table.TransformColumnTypes(
+						Table.SelectColumns(expanded, {"symbol", "strategy", "ts", "equity", "buy_hold_equity"}),
+						{{"equity", type number}, {"buy_hold_equity", type number}}
+					)
 				in
-					data
+					typed

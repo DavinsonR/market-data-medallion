@@ -58,6 +58,16 @@ Key measures (on `combination_analysis`): `Variants Evaluated`,
 
 ## Troubleshooting
 
+- **"The remote certificate is invalid according to the validation procedure"** —
+  the Supabase pooler presents a certificate signed by Supabase's own CA, which
+  Windows does not trust out of the box. Clean fix: Supabase dashboard →
+  Project Settings → Database → SSL → download the CA certificate, double-click
+  it in Windows → Install Certificate → Current User → "Place all certificates
+  in the following store" → **Trusted Root Certification Authorities** → finish,
+  then refresh again. Quick-and-dirty alternative (unencrypted traffic — fine
+  for public market data, your call): File → Options and settings → Data source
+  settings → select the server → Edit Permissions → uncheck **Encrypt
+  connections** and accept the warning.
 - **"Couldn't resolve host"** — you are on a network without IPv4 internet or the
   pooler host changed; check `PgHost` in Edit parameters.
 - **Login failed** — the database password rotates in Supabase → Settings →
