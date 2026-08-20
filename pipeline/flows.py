@@ -110,8 +110,15 @@ def _run_dbt(args: list[str], *, required: bool) -> bool:
 
 @task
 def run_dbt() -> None:
-    """Build silver + gold and run every data-quality test."""
-    _run_dbt(["build"], required=True)
+    """Build silver + gold and run every data-quality test.
+
+    ``--full-refresh`` on purpose: dbt seeds do not ALTER an existing table, so a
+    seed schema change (dim_assets gaining fx_pair) silently breaks every
+    subsequent build against a database created before it — which took the daily
+    cron down for three days. This model has no incremental materializations, so
+    the flag's only effect is recreating seeds, and 48 rows cost nothing.
+    """
+    _run_dbt(["build", "--full-refresh"], required=True)
 
 
 @task
