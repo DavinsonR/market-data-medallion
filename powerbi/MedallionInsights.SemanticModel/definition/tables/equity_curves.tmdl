@@ -2,7 +2,11 @@
 /// run metadata in SQL so the model gets symbol/strategy directly.
 table equity_curves
 
-	measure 'Equity' = AVERAGE('equity_curves'[equity])
+	/// Named 'Strategy Equity' (not 'Equity'): Tabular object names are
+	/// case-insensitive per table, so a measure 'Equity' collides with the
+	/// `equity` column — the engine rejects it at database creation even though
+	/// the TMDL parser accepts it.
+	measure 'Strategy Equity' = AVERAGE('equity_curves'[equity])
 		formatString: $#,0
 
 	measure 'Buy & Hold Equity' = AVERAGE('equity_curves'[buy_hold_equity])

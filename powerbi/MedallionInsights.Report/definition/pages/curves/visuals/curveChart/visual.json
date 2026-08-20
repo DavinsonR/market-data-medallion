@@ -39,10 +39,10 @@
                       "Entity": "equity_curves"
                     }
                   },
-                  "Property": "Equity"
+                  "Property": "Strategy Equity"
                 }
               },
-              "queryRef": "equity_curves.Equity"
+              "queryRef": "equity_curves.Strategy Equity"
             },
             {
               "field": {
