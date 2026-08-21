@@ -15,7 +15,14 @@ import pytest
 from pipeline import bronze
 from pipeline.config import AssetConfig, SourcesConfig
 from pipeline.models import Candle
-from pipeline.sources import MissingApiKeyError, RateLimitError, SourceError, get_client
+from pipeline.sources import (
+    AuthError,
+    MissingApiKeyError,
+    RateLimitError,
+    SourceError,
+    get_client,
+    redact,
+)
 from pipeline.sources.coinbase import CoinbaseClient
 from pipeline.sources.kraken import KrakenClient
 from pipeline.sources.tiingo import TiingoClient
@@ -146,6 +153,74 @@ def test_429_fails_fast_without_retrying(monkeypatch: pytest.MonkeyPatch) -> Non
     with pytest.raises(RateLimitError, match="429"):
         client.fetch_candles("BTC-USD", start, start)
     assert len(session.calls) == 1, "a rate-limited call must not be retried"
+
+
+class UrlBearingResponse(FakeResponse):
+    """A response whose raise_for_status leaks the full URL, as requests does."""
+
+    def __init__(self, status_code: int, url: str) -> None:
+        super().__init__(status_code)
+        self.url = url
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise RuntimeError(f"{self.status_code} Client Error: for url: {self.url}")
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_auth_refusal_fails_fast_without_retrying(
+    status: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A wrong credential answers the same way every time. Retrying it burned
+    46 minutes a night for four nights (FALLO-25); one call, one AuthError."""
+    monkeypatch.setattr("pipeline.sources.base.BACKOFF_SECONDS", 0.0)
+    session = FakeSession([FakeResponse(status), FakeResponse(200, payload=[])])
+    client = CoinbaseClient(session=session)  # type: ignore[arg-type]
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+
+    with pytest.raises(AuthError, match=str(status)):
+        client.fetch_candles("BTC-USD", start, start)
+    assert len(session.calls) == 1, "a rejected credential must not be retried"
+
+
+def test_redact_masks_credential_query_params() -> None:
+    masked = redact(
+        "GET https://api.example.com/p?startDate=2026-01-01&token=s3cr3t-value&x=1"
+    )
+    assert "s3cr3t-value" not in masked
+    assert "token=***" in masked
+    assert "startDate=2026-01-01" in masked, "non-secret params must survive"
+    for param in ("api_key", "apiKey", "apikey", "secret", "access_token", "password"):
+        assert "leak" not in redact(f"?{param}=leak")
+
+
+def test_auth_error_never_carries_the_credential(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The message is persisted to meta.ingest_runs, so it must not be the key."""
+    monkeypatch.setattr("pipeline.sources.base.BACKOFF_SECONDS", 0.0)
+    monkeypatch.setenv("TIINGO_API_KEY", "SUPER-SECRET-KEY")
+    session = FakeSession([FakeResponse(403)])
+    client = TiingoClient(session=session)  # type: ignore[arg-type]
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+
+    with pytest.raises(AuthError) as excinfo:
+        client.fetch_candles("SPY", start, start)
+    assert "SUPER-SECRET-KEY" not in str(excinfo.value)
+
+
+def test_http_error_message_never_carries_the_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """requests puts the whole URL in the error; the 4xx path must scrub it too."""
+    monkeypatch.setattr("pipeline.sources.base.BACKOFF_SECONDS", 0.0)
+    leaky = "https://api.tiingo.com/tiingo/daily/SPY/prices?token=SUPER-SECRET-KEY"
+    session = FakeSession([UrlBearingResponse(404, leaky)])
+    client = CoinbaseClient(session=session)  # type: ignore[arg-type]
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+
+    with pytest.raises(SourceError) as excinfo:
+        client.fetch_candles("BTC-USD", start, start)
+    assert "SUPER-SECRET-KEY" not in str(excinfo.value)
+    assert "token=***" in str(excinfo.value)
 
 
 def test_coinbase_raises_after_retries_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -459,6 +534,25 @@ def test_ingest_records_failed_run_on_fetch_error(monkeypatch: pytest.MonkeyPatc
     assert result.rows_fetched == 0 and result.rows_inserted == 0
     assert len(conn.run_rows) == 1 and conn.run_rows[0][8] == "failed"
     assert conn.candle_rows == []
+
+
+def test_ingest_flags_auth_refusal_so_the_caller_can_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 403 is audited like any failure but carries auth_failed, which is what
+    lets the flow short-circuit the source instead of asking 45 more times."""
+    conn = FakeConn(watermark=None)
+    stub = StubClient(
+        exc=AuthError("GET https://api.example.com/p?token=*** refused with HTTP 403")
+    )
+    _install_stub(monkeypatch, stub)
+
+    result = bronze.ingest(conn, "tiingo", make_asset(), "1d")
+
+    assert result.status == "failed"
+    assert result.auth_failed is True
+    assert result.rate_limited is False
+    assert len(conn.run_rows) == 1 and conn.run_rows[0][8] == "failed"
 
 
 def test_ingest_lets_missing_api_key_propagate(monkeypatch: pytest.MonkeyPatch) -> None:

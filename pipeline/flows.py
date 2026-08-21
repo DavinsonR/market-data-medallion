@@ -76,13 +76,14 @@ def _logger() -> logging.Logger:
 def ingest_asset(source_name: str, asset: AssetConfig, granularity: str) -> IngestResult:
     """Ingest one (source, symbol) pair.
 
-    Transient failures raise so Prefect retries them. A rate-limit refusal is
-    returned instead of raised: the quota is hourly, so retrying inside this run
-    would only burn more of it — the caller trips a circuit breaker instead.
+    Transient failures raise so Prefect retries them. Two refusals are returned
+    instead of raised, because no retry can change their answer inside this run:
+    a rate limit (hourly quota) and an auth rejection (wrong credential). The
+    caller trips a circuit breaker on both.
     """
     with psycopg.connect(database_url()) as conn:
         result = bronze.ingest(conn, source_name, asset, granularity)
-    if result.status == "failed" and not result.rate_limited:
+    if result.status == "failed" and not (result.rate_limited or result.auth_failed):
         raise RuntimeError(f"ingestion failed for {source_name}/{asset.symbol}: {result.error}")
     return result
 
@@ -242,29 +243,47 @@ def backtest_symbol(asset: AssetConfig, cfg: AppConfig) -> int:
     return n
 
 
-def _ingest_all(cfg: AppConfig, logger: logging.Logger) -> tuple[int, list[str], list[str]]:
+def _ingest_all(
+    cfg: AppConfig, logger: logging.Logger
+) -> tuple[int, list[str], list[str], dict[str, str]]:
     """Ingest every (asset, source) pair, tolerating individual failures.
 
-    Rate limits trip a per-source circuit breaker: once a source answers 429, the
-    remaining symbols for that source are deferred without further calls. Their
-    watermarks are untouched, so the next run resumes exactly where this one stopped.
+    Two per-source circuit breakers, for the two refusals no retry can fix:
+
+    * **429 rate limit** — the remaining symbols for that source are deferred
+      without further calls. Watermarks are untouched, so the next run resumes
+      exactly where this one stopped. This is normal operation on a free tier.
+    * **401/403 auth** — the credential is wrong. Deferring is pointless because
+      tomorrow's run fails identically, so the source is short-circuited and the
+      flow is told to abort rather than publish a refresh that refreshed nothing.
     """
     succeeded = 0
     failures: list[str] = []
     deferred: list[str] = []
     limited_sources: set[str] = set()
+    auth_failed_sources: dict[str, str] = {}
     for asset in cfg.assets:
         for source_name in asset.sources.all:
             label = f"{source_name}/{asset.symbol}"
             if source_name in TIINGO_SOURCES and not tiingo_api_key():
                 logger.warning("TIINGO_API_KEY not set — skipping %s", label)
                 continue
+            if source_name in auth_failed_sources:
+                # No point asking 45 more times for the same rejection.
+                continue
             if source_name in limited_sources:
                 deferred.append(label)
                 continue
             try:
                 result = ingest_asset(source_name, asset, cfg.granularity)
-                if result.rate_limited:
+                if result.auth_failed:
+                    auth_failed_sources[source_name] = result.error or "credential rejected"
+                    failures.append(label)
+                    logger.error(
+                        "%s rejected our credential — short-circuiting its remaining symbols",
+                        source_name,
+                    )
+                elif result.rate_limited:
                     limited_sources.add(source_name)
                     deferred.append(label)
                     logger.warning(
@@ -278,7 +297,7 @@ def _ingest_all(cfg: AppConfig, logger: logging.Logger) -> tuple[int, list[str],
             except Exception as exc:  # transient API errors, bad symbols
                 failures.append(label)
                 logger.error("ingestion failed for %s: %s", label, exc)
-    return succeeded, failures, deferred
+    return succeeded, failures, deferred, auth_failed_sources
 
 
 @flow(name="daily-medallion-flow", log_prints=True)
@@ -286,7 +305,20 @@ def daily_flow() -> None:
     logger = _logger()
     cfg = load_config()
 
-    succeeded, failures, deferred = _ingest_all(cfg, logger)
+    succeeded, failures, deferred, auth_failed = _ingest_all(cfg, logger)
+    if auth_failed:
+        # Deliberately before dbt and before the export. A run that ingested
+        # nothing must not overwrite exports/index.json, because the website
+        # reads generated_at from it and would show a fresh timestamp over
+        # stale data — a failure that looks like health (FALLO-26). Raising
+        # here also turns the Actions run red, which is the only notification
+        # channel this project has.
+        detail = "; ".join(f"{src}: {err}" for src, err in sorted(auth_failed.items()))
+        raise RuntimeError(
+            "aborting before dbt: these sources rejected our credentials, so this "
+            "run has no new data to publish. Fix the secret and re-run — "
+            f"{detail}"
+        )
     if failures:
         logger.warning(
             "%d ingestions failed (recorded in meta.ingest_runs, will self-heal "

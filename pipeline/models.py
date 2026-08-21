@@ -45,3 +45,8 @@ class IngestResult:
     # True when the source refused with HTTP 429: not a transient fault, so the
     # caller must stop hitting that source for the rest of the run.
     rate_limited: bool = False
+    # True when the source refused with HTTP 401/403. Also not transient, and
+    # unlike a rate limit it will not clear by itself: the run must go red so
+    # somebody fixes the credential instead of the site quietly publishing
+    # yesterday's data under today's timestamp.
+    auth_failed: bool = False

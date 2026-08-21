@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
@@ -31,6 +32,30 @@ class RateLimitError(SourceError):
     """
 
 
+class AuthError(SourceError):
+    """The source refused the call with HTTP 401 or 403.
+
+    A credential is missing, wrong, or revoked. Unlike a 5xx this is not
+    transient and unlike a 429 it will not clear on the next window: every
+    retry and every later run fails identically until a human fixes the
+    secret. Retrying it cost this pipeline 46 minutes a night for four nights
+    (see FALLO-25) while the site kept publishing as if all was well.
+    """
+
+
+# A query string carries the credential. Any message built from a URL therefore
+# carries it too, and those messages are persisted to meta.ingest_runs and can
+# reach logs and exports. Redact before the string exists, not before it ships.
+_SECRET_PARAM = re.compile(
+    r"(?i)\b(token|api[_-]?key|key|apikey|password|secret|access[_-]?token)=[^&\s'\"]+"
+)
+
+
+def redact(text: str) -> str:
+    """Mask credential-bearing query parameters in ``text``."""
+    return _SECRET_PARAM.sub(lambda m: f"{m.group(1)}=***", text)
+
+
 @runtime_checkable
 class SourceClient(Protocol):
     """Fetches daily candles for a canonical symbol within [start, end]."""
@@ -57,15 +82,27 @@ def request_json(
         last_status = response.status_code
         if last_status == 429:
             # Hourly quota: retrying now cannot succeed and costs more quota.
-            raise RateLimitError(f"GET {url} refused with HTTP 429 (rate limited)")
+            raise RateLimitError(f"GET {redact(url)} refused with HTTP 429 (rate limited)")
+        if last_status in (401, 403):
+            # A bad credential is not a transient fault: fail the run loudly
+            # rather than retrying it 46 times against the same rejection.
+            raise AuthError(
+                f"GET {redact(url)} refused with HTTP {last_status}: "
+                "the API credential is missing, wrong or revoked"
+            )
         if last_status >= 500:
             if attempt < max_tries:
                 delay = BACKOFF_SECONDS if backoff_seconds is None else backoff_seconds
                 time.sleep(delay * 2 ** (attempt - 1))
             continue
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except Exception as exc:  # requests.HTTPError puts the full URL in str(exc)
+            raise SourceError(redact(str(exc))) from None
         return response.json()
-    raise SourceError(f"GET {url} failed with HTTP {last_status} after {max_tries} tries")
+    raise SourceError(
+        f"GET {redact(url)} failed with HTTP {last_status} after {max_tries} tries"
+    )
 
 
 def get_client(name: str) -> SourceClient:
