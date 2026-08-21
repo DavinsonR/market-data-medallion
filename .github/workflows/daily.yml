@@ -80,9 +80,17 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          # Best-effort, never fatal. The flow above already opened a connection
+          # and wrote to the warehouse, and that IS the activity that keeps a
+          # free-tier project from pausing — this ping only covers the REST API.
+          # It exited 22 on a run whose data published perfectly (FALLO-29): a
+          # red job must mean the data is wrong, or nobody reads the red.
           if [ -n "$SUPABASE_URL" ]; then
-            curl -fsS -H "apikey: $SUPABASE_ANON_KEY" "$SUPABASE_URL/rest/v1/" -o /dev/null
-            echo "Supabase project pinged"
+            if curl -fsS -H "apikey: $SUPABASE_ANON_KEY" "$SUPABASE_URL/rest/v1/" -o /dev/null; then
+              echo "Supabase project pinged"
+            else
+              echo "::warning::Supabase REST ping failed; the flow's own DB writes still count as activity"
+            fi
           else
             echo "SUPABASE_URL not set, skipping ping"
           fi
