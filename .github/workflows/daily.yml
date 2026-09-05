@@ -67,7 +67,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add exports/*.json
+          # A shell glob is not recursive: `exports/*.json` staged index.json and silently
+          # skipped the 48 backtests/<SYMBOL>.json the site charts, for 18 days. -A also
+          # stages the per-symbol files export.py prunes.
+          git add -A exports/
           if git diff --cached --quiet; then
             echo "exports unchanged, nothing to commit"
           else
