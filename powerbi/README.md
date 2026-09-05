@@ -75,3 +75,21 @@ Key measures (on `combination_analysis`): `Variants Evaluated`,
 - **The report layout fails to load but the model opens** — create a blank report
   on the same model (File → New) and rebuild pages from the table above; the
   model, measures and relationships are the substance of this artifact.
+
+## Screenshots
+
+There are none in the repo yet: the report was authored and validated on a machine without Power BI
+Desktop, so nobody has rendered it. Once it opens in Desktop, export each page as PNG (the canvas is
+1280×720; a 2× export is fine) and name the files after the page ids in
+`MedallionInsights.Report/definition/pages/pages.json`:
+
+| Page | File |
+|---|---|
+| The Verdict | `verdict.png` |
+| Strategy Explorer | `explorer.png` |
+| FX Decomposition | `fx.png` |
+| Equity Curves | `curves.png` |
+
+Put them in `docs/powerbi/` in this repo and copy the same four files to `public/powerbi/` in the
+portfolio site: its Power BI page shows a page's screenshot when the file exists and falls back to
+the visuals list when it does not.

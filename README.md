@@ -50,9 +50,9 @@ flowchart LR
     GO --> PBI
 ```
 
-45 assets, daily candles: 2 crypto (`BTC-USD`, `ETH-USD` — Coinbase primary, Kraken for
+48 assets, daily candles: 2 crypto (`BTC-USD`, `ETH-USD` — Coinbase primary, Kraken for
 cross-exchange reconciliation), 40 listed instruments from Tiingo (broad-market, international and
-sector ETFs, US large caps, Latin American ADRs) and 3 FX pairs (`USDCOP`, `USDBRL`, `EURUSD`).
+sector ETFs, US large caps, Latin American ADRs) and 6 FX pairs (`USDCOP`, `USDBRL`, `USDMXN`, `USDCLP`, `USDPEN`, `EURUSD`).
 Assets, sources, strategies, combination and split settings, and cost assumptions live in one
 declarative file: [`config.yaml`](config.yaml).
 
@@ -126,8 +126,8 @@ and the site: `macd+volume_breakout`, `fibonacci+macd+sma_cross`.
 | Asset group | Applicable strategies | Variants per asset |
 |---|---|---|
 | 42 assets with volume | 5 | 2⁵ − 1 = **31** |
-| 3 FX pairs (no volume) | 4 | 2⁴ − 1 = **15** |
-| **45 assets** | | 42 × 31 + 3 × 15 = **1,347 backtests per run** |
+| 6 FX pairs (no volume) | 4 | 2⁴ − 1 = **15** |
+| **48 assets** | | 42 × 31 + 6 × 15 = **1,392 backtests per run** |
 
 **Why AND and not OR.** OR is a union of signals: adding rules can only *increase* the time spent
 invested, so an OR lattice drifts toward being always long — it converges on buy & hold with extra
@@ -151,8 +151,8 @@ thirty-one backtests.
 
 ### The storage trade-off: combinations keep metrics, not curves
 
-An equity curve costs ~174 KB per run (measured). At 1,347 runs that is ~229 MB per execution, and
-the retention policy keeps two generations — ~458 MB against a 500 MB free-tier database. Storing
+An equity curve costs ~174 KB per run (measured). At 1,392 runs that is ~237 MB per execution, and
+the retention policy keeps two generations — ~473 MB against a 500 MB free-tier database. Storing
 every curve is therefore not an option, and the honest response is to choose explicitly rather
 than to silently truncate history:
 
@@ -168,7 +168,7 @@ on demand — a rare, cheap operation compared with paying for 229 MB every day.
 
 ## Out-of-sample validation
 
-**Testing ~1,347 variants against one price history and reporting the winner is data dredging.**
+**Testing ~1,392 variants against one price history and reporting the winner is data dredging.**
 With that many draws, some variant will look brilliant by chance alone; that is arithmetic, not
 skill. So every run — single and combination alike — is scored on a held-out window it never
 influenced:
@@ -237,6 +237,53 @@ with `to_regclass` first, so a fresh database exports a null `overfitting` objec
 `gold.backtest_runs` for the combinations instead of crashing. The connection pins
 `SET TIME ZONE 'UTC'` before reading anything, because every date label in the JSON is derived from
 a `TIMESTAMPTZ` and a server on local time silently shifts them by a day.
+
+## Power BI report (PBIP)
+
+The gold marts also feed an interactive Power BI report, **Medallion Insights**, committed as a
+Power BI Project in [`powerbi/`](powerbi/): the semantic model in TMDL, the report pages in PBIR,
+every part plain text and reviewable in a pull request. No `.pbix`, no credentials — the database
+password is entered once in Power BI Desktop and stays in its local credential store. Opening
+instructions and troubleshooting live in [`powerbi/README.md`](powerbi/README.md).
+
+```mermaid
+erDiagram
+    dim_assets ||--o{ combination_analysis : symbol
+    dim_assets ||--o{ asset_summary : symbol
+    dim_assets ||--o{ fx_decomposition : symbol
+    dim_assets ||--o{ equity_curves : symbol
+    overfitting_summary {
+        int n_components
+        float oos_survival_rate
+    }
+    leaderboard {
+        string strategy
+        float beat_rate
+    }
+```
+
+| Table | Source | Grain |
+|---|---|---|
+| `dim_assets` | `silver.dim_assets` | one row per asset |
+| `combination_analysis` | `gold.mart_combination_analysis` | one row per (asset, strategy variant) · 11 measures |
+| `asset_summary` | `gold.mart_asset_summary` | one row per asset |
+| `fx_decomposition` | `gold.mart_fx_decomposition` | one row per (ADR, window) · 4 measures |
+| `equity_curves` | `gold.backtest_runs` ⨝ `gold.backtest_equity_curves` | one row per (asset, strategy, bar) · 2 measures |
+| `overfitting_summary` | `gold.mart_overfitting_summary` | one row per number of combined signals, plus a grand total |
+| `leaderboard` | `gold.mart_strategy_leaderboard` | one row per (strategy, asset class, region), plus grand totals |
+
+Four pages: **The Verdict** (the honesty funnel — variants → in-sample winners → out-of-sample
+survivors — with survival and exposure by number of combined signals), **Strategy Explorer**
+(region / class / kind slicers over every variant), **FX Decomposition** (company vs currency for
+the Latin American ADRs, by window) and **Equity Curves** (strategy vs buy & hold for any asset).
+The 17 DAX measures are catalogued with their expressions on the portfolio site:
+<https://proyecto-davirson-git.vercel.app/en/projects/powerbi>.
+
+**Why there is no public embed.** "Publish to web" needs a Power BI Pro licence on a work tenant
+whose administrator allows public embedding, and it makes the dataset itself public. This project
+runs on a $0 budget, so the report ships as source: open the `.pbip` in Power BI Desktop (free) and
+refresh against the warehouse. Screenshots of the four pages, once exported from Desktop, go in
+`docs/powerbi/` here and on the site (file names in `powerbi/README.md`).
 
 ## Orchestration
 
@@ -321,6 +368,7 @@ market-data-medallion/
 │   └── flows.py                 # Prefect 3 flow wiring the daily run together
 ├── dbt/                         # silver + gold models, schema tests, source freshness
 ├── exports/                     # committed JSON snapshots consumed by the portfolio site
+├── powerbi/                     # Power BI report as a PBIP project: TMDL model + PBIR pages, all text
 ├── tests/                       # source-parsing fixtures, engine and export known-answer tests
 └── .github/workflows/           # ci.yml, daily.yml
 ```
@@ -329,7 +377,6 @@ market-data-medallion/
 
 - Interactive strategy playground on the portfolio site, driven by `exports/index.json` and the
   per-asset combination heatmaps
-- Power BI report over the gold marts, committed as a PBIP project
 - Longer term: a paper-trading bot reusing the same signal code
 
 ## Author
